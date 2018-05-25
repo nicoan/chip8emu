@@ -3,6 +3,7 @@ use std::io::Read;
 use std::io::Error;
 use rand::random;
 
+// VF
 const FLAG_REGISTER: usize = 15;
 
 // Represnts CHIP-8 current state
@@ -17,7 +18,7 @@ pub struct State {
     registers: [u8; 16],
 
     // Call Stack
-    stack: [u8; 16],
+    stack: [u16; 16],
 
     // Index register
     index: u16,
@@ -26,7 +27,7 @@ pub struct State {
     pc: u16,
 
     // Stack pointer
-    sp: u16,
+    sp: usize,
 
     // Timers
     delay_timer: u8,
@@ -76,6 +77,17 @@ impl State {
                 Ok(())
             }
 
+            // 2nnn - CALL addr
+            // Call subroutine at nnn.
+            // The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn.
+            (0x2, _, _, _) => {
+                self.stack[self.sp] = self.pc;
+                self.sp += 1;
+                let  address: u16 = opcode & 0x0FFF;
+                self.pc = address;
+                Ok(())
+            }
+
             // 3xkk - SE Vx, byte
             // Skip next instruction if Vx = kk.
             // The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2.
@@ -108,12 +120,12 @@ impl State {
                 Ok(())
             },
 
-            // 4xkk - SNE Vx, byte
-            // Skip next instruction if Vx != kk.
-            // The interpreter compares register Vx to kk, and if they are not equal, increments the program counter by 2.
-            (0x6, r, _, _) => {
+            //6xkk - LD Vx, byte
+            //Set Vx = kk.
+            //The interpreter puts the value kk into register Vx.
+            (0x6, x, _, _) => {
                 let kk: u8 = (opcode & 0x00FF) as u8;
-                self.registers[r as usize] = kk;
+                self.registers[x as usize] = kk;
                 Ok(())
             },
 
@@ -179,10 +191,56 @@ impl State {
                 Ok(())
             },
 
+            // 8xy6 - SHR Vx {, Vy}
+            // Set Vx = Vx SHR 1.
+            // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
+            (0x8, x, y, 0x6) => {
+                self.registers[FLAG_REGISTER] = if 0x1 & self.registers[x as usize] == 1 { 1 } else { 0 };
+                self.registers[x as usize] = self.registers[x as usize] >> 1;
+                Ok(())
+            },
+
+            // 8xy7 - SUBN Vx, Vy
+            // Set Vx = Vy - Vx, set VF = NOT borrow.
+            // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
+            (0x8, x, y, 0x7) => {
+                self.registers[FLAG_REGISTER] = if self.registers[y as usize] > self.registers[x as usize] { 1 } else { 0 };
+                self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
+                Ok(())
+            },
+
+            //8xyE - SHL Vx {, Vy}
+            //Set Vx = Vx SHL 1.
+            //If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
+            (0x8, x, y, 0xE) => {
+                self.registers[FLAG_REGISTER] = if self.registers[x as usize] >> 3 == 1 { 1 } else { 0 };
+                self.registers[x as usize] = (self.registers[x as usize] >> 1) | 0x8;
+                Ok(())
+            },
+
+            // 9xy0 - SNE Vx, Vy
+            // Skip next instruction if Vx != Vy.
+            // The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2.
+            (0x9, x, y, 0x0) => {
+                if self.registers[x as usize] != self.registers[y as usize] {
+                    self.pc += 2;
+                }
+                Ok(())
+            },
+
             // Annn - MVI nnn
             // Load index register with constant xxx
             (0xA, _, _, _) => {
                 self.index = opcode & 0x0FFF;
+                Ok(())
+            },
+
+            // Bnnn - JP V0, addr
+            // Jump to location nnn + V0.
+            // The program counter is set to nnn plus the value of V0.
+            (0xB, _, _, _) => {
+                let address: u16 = opcode & 0x0FFF;
+                self.pc = address + self.registers[0 as usize] as u16;
                 Ok(())
             },
 
@@ -196,7 +254,12 @@ impl State {
                 //println!("{} - {} - {}", random_number, number, self.registers[r as usize]);
                 Ok(())
             },
-            _ => Err("Invalid opcode".to_string()),
+
+            // Invalid opcodes
+            _ => {
+                println!("Invalid opcode");
+                Err("Invalid opcode".to_string())
+            }
         }
     }
 

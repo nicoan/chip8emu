@@ -29,6 +29,9 @@ pub struct State {
     // Stack pointer
     sp: usize,
 
+    // Screen bitmap
+    screen: [[u8; 8]; 32], // 32 rows of 8 u8 (64bits)
+
     // Timers
     delay_timer: u8,
     sound_timer: u8
@@ -56,18 +59,26 @@ impl State {
             memory: memory,
             stack: [0x0; 16],
             delay_timer: 0x0,
-            sound_timer: 0x0
+            sound_timer: 0x0,
+            screen: [[0x0; 8]; 32]
         })
     }
 
     pub fn execute_instruction(&mut self) -> Result<(), String> {
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
-        let opcode_hex: String = format!("{:x}", opcode);
-        println!("{}", opcode_hex);
-        println!("{:?}", self.break_opcode(opcode));
+        //let opcode_hex: String = format!("{:x}", opcode);
+        //println!("{}", opcode_hex);
+        //println!("{:?}", self.break_opcode(opcode));
 
         match self.break_opcode(opcode) {
+            // 00E0 - CLS
+            // Clear the display.
+            (0x0, 0x0, 0xE, 0x0) => {
+                self.screen = [[0x0; 8]; 32];
+                Ok(())
+            }
+
             //1nnn - JP addr
             //Jump to location nnn.
             //The interpreter sets the program counter to nnn.
@@ -255,6 +266,37 @@ impl State {
                 Ok(())
             },
 
+            (0xD, x, y, n) => {
+                let mut i: u8 = 0;
+                let v_x: u8 = self.registers[x as usize];
+                let v_y: u8 = self.registers[y as usize];
+                let screen_vertical_index: u8 = v_x / 8;
+                let reminder: u8 = v_x % 8;
+                println!("{} {} {} {}", v_x, v_y, screen_vertical_index, reminder);
+                for p in 0..n {
+                    let sprite_part = self.memory[(self.index + i as u16) as usize];
+                    if reminder != 0 {
+                        // Draw left part of the sprite
+                        let sprite_left = sprite_part >> reminder;
+                        self.screen[(v_y + i) as usize][screen_vertical_index as usize] = self.memory[(self.index + i as u16) as usize] ;
+
+                        // Prevent screen overflow
+                        if screen_vertical_index < 7 {
+                            // Draw right part of the sprite
+                            let sprite_right = sprite_part << reminder;
+                            self.screen[(v_y + i) as usize][(screen_vertical_index + 1) as usize] = self.memory[(self.index + i as u16) as usize] ;
+                        }
+                    } else {
+                        self.screen[(v_y + i) as usize][screen_vertical_index as usize] = sprite_part;
+                    }
+                    i += 1;
+                }
+
+                self.print_screen();
+                Ok(())
+            },
+
+
             // Invalid opcodes
             _ => {
                 println!("Invalid opcode");
@@ -273,6 +315,21 @@ impl State {
          (opcode >> 8 & 0xF) as u8,
          (opcode >> 4 & 0xF) as u8,
          (opcode & 0xF) as u8)
+    }
+
+    fn print_screen(&mut self) {
+        for y in 0..32 {
+            for x in 0..8 {
+                for i in 0..8 {
+                    if (self.screen[y as usize][x as usize] >> i & 0x1) == 1 {
+                        print!("█");
+                    } else {
+                        print!(" ");
+                    }
+                }
+            }
+            println!(" ")
+        }
     }
 }
 

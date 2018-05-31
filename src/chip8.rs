@@ -2,9 +2,31 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Error;
 use rand::random;
+use termion::{cursor};
+use std::io::{Write, stdout, stdin};
 
 // VF
 const FLAG_REGISTER: usize = 15;
+
+const fontset: [u8; 80] =
+[
+  0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+  0x20, 0x60, 0x20, 0x20, 0x70, // 1
+  0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+  0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+  0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+  0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+  0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+  0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+  0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+  0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+  0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+  0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+  0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+  0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+  0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+  0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+];
 
 // Represnts CHIP-8 current state
 pub struct State {
@@ -39,13 +61,18 @@ pub struct State {
 
 impl State {
     pub fn new(filename: String) -> Result<State, Error> {
+        let mut memory: [u8; 4096] = [0x0; 4096];
+
+        // Load the fontset
+        for i in 0..80 {
+            memory[0x50 + i] = fontset[i];
+        }
+
         // Read CHIP-8 File
+        // Allocate the rom in memory
         let mut file = try!(File::open(filename));
         let mut buffer = Vec::new();
         try!(file.read_to_end(&mut buffer));
-
-        // Allocate it in memory
-        let mut memory: [u8; 4096] = [0x0; 4096];
         for i in 0..buffer.len() {
             memory[0x200 + i] = buffer[i];
         }
@@ -67,15 +94,24 @@ impl State {
     pub fn execute_instruction(&mut self) -> Result<(), String> {
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
-        //let opcode_hex: String = format!("{:x}", opcode);
-        //println!("{}", opcode_hex);
-        //println!("{:?}", self.break_opcode(opcode));
+        let opcode_hex: String = format!("{:x}", opcode);
+        println!("{}", opcode_hex);
+        println!("{:?}", self.break_opcode(opcode));
 
         match self.break_opcode(opcode) {
             // 00E0 - CLS
             // Clear the display.
             (0x0, 0x0, 0xE, 0x0) => {
                 self.screen = [[0x0; 8]; 32];
+                Ok(())
+            }
+
+            // 00EE - RET
+            // Return from a subroutine.
+            // The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
+            (0x0, 0x0, 0xE, 0xE) => {
+                self.pc = self.stack[self.sp];
+                self.sp -= 1;
                 Ok(())
             }
 
@@ -108,7 +144,7 @@ impl State {
                     self.pc += 2;
                 }
                 Ok(())
-            },
+            }
 
             // 4xkk - SNE Vx, byte
             // Skip next instruction if Vx != kk.
@@ -119,7 +155,7 @@ impl State {
                     self.pc += 2;
                 }
                 Ok(())
-            },
+            }
 
             // 5xy0 - SE Vx, Vy
             // Skip next instruction if Vx = Vy.
@@ -129,7 +165,7 @@ impl State {
                     self.pc += 2;
                 }
                 Ok(())
-            },
+            }
 
             //6xkk - LD Vx, byte
             //Set Vx = kk.
@@ -138,7 +174,7 @@ impl State {
                 let kk: u8 = (opcode & 0x00FF) as u8;
                 self.registers[x as usize] = kk;
                 Ok(())
-            },
+            }
 
             // 7xkk - ADD Vx, byte
             // Set Vx = Vx + kk.
@@ -147,7 +183,7 @@ impl State {
                 let kk: u8 = (opcode & 0x00FF) as u8;
                 self.registers[r as usize] += kk;
                 Ok(())
-            },
+            }
 
             // 8xy0 - LD Vx, Vy
             // Set Vx = Vy.
@@ -155,7 +191,7 @@ impl State {
             (0x8, x, y, 0x0) => {
                 self.registers[x as usize] = self.registers[y as usize];
                 Ok(())
-            },
+            }
 
             // 8xy1 - OR Vx, Vy
             // Set Vx = Vx OR Vy.
@@ -163,7 +199,7 @@ impl State {
             (0x8, x, y, 0x1) => {
                 self.registers[x as usize] = self.registers[x as usize] | self.registers[y as usize];
                 Ok(())
-            },
+            }
 
             // 8xy2 - AND Vx, Vy
             // Set Vx = Vx AND Vy.
@@ -171,7 +207,7 @@ impl State {
             (0x8, x, y, 0x2) => {
                 self.registers[x as usize] = self.registers[x as usize] & self.registers[y as usize];
                 Ok(())
-            },
+            }
 
             // 8xy3 - XOR Vx, Vy
             // Set Vx = Vx XOR Vy.
@@ -179,7 +215,7 @@ impl State {
             (0x8, x, y, 0x3) => {
                 self.registers[x as usize] = self.registers[x as usize] ^ self.registers[y as usize];
                 Ok(())
-            },
+            }
 
             // 8xy4 - ADD Vx, Vy
             // Set Vx = Vx + Vy, set VF = carry.
@@ -191,7 +227,7 @@ impl State {
                 self.registers[x as usize] = result as u8;
                 self.registers[FLAG_REGISTER] = if result > 255 { 1 } else { 0 };
                 Ok(())
-            },
+            }
 
             // 8xy5 - SUB Vx, Vy
             // Set Vx = Vx - Vy, set VF = NOT borrow.
@@ -200,7 +236,7 @@ impl State {
                 self.registers[FLAG_REGISTER] = if self.registers[x as usize] > self.registers[y as usize] { 1 } else { 0 };
                 self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize];
                 Ok(())
-            },
+            }
 
             // 8xy6 - SHR Vx {, Vy}
             // Set Vx = Vx SHR 1.
@@ -209,7 +245,7 @@ impl State {
                 self.registers[FLAG_REGISTER] = if 0x1 & self.registers[x as usize] == 1 { 1 } else { 0 };
                 self.registers[x as usize] = self.registers[x as usize] >> 1;
                 Ok(())
-            },
+            }
 
             // 8xy7 - SUBN Vx, Vy
             // Set Vx = Vy - Vx, set VF = NOT borrow.
@@ -218,7 +254,7 @@ impl State {
                 self.registers[FLAG_REGISTER] = if self.registers[y as usize] > self.registers[x as usize] { 1 } else { 0 };
                 self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
                 Ok(())
-            },
+            }
 
             //8xyE - SHL Vx {, Vy}
             //Set Vx = Vx SHL 1.
@@ -227,7 +263,7 @@ impl State {
                 self.registers[FLAG_REGISTER] = if self.registers[x as usize] >> 3 == 1 { 1 } else { 0 };
                 self.registers[x as usize] = (self.registers[x as usize] >> 1) | 0x8;
                 Ok(())
-            },
+            }
 
             // 9xy0 - SNE Vx, Vy
             // Skip next instruction if Vx != Vy.
@@ -237,14 +273,14 @@ impl State {
                     self.pc += 2;
                 }
                 Ok(())
-            },
+            }
 
             // Annn - MVI nnn
             // Load index register with constant xxx
             (0xA, _, _, _) => {
                 self.index = opcode & 0x0FFF;
                 Ok(())
-            },
+            }
 
             // Bnnn - JP V0, addr
             // Jump to location nnn + V0.
@@ -253,7 +289,7 @@ impl State {
                 let address: u16 = opcode & 0x0FFF;
                 self.pc = address + self.registers[0 as usize] as u16;
                 Ok(())
-            },
+            }
 
             // Cxkk - RND Vx, byte
             // Set Vx = random byte AND kk. The interpreter generates a random number
@@ -264,38 +300,68 @@ impl State {
                 self.registers[r as usize] = number & random_number;
                 //println!("{} - {} - {}", random_number, number, self.registers[r as usize]);
                 Ok(())
-            },
+            }
 
+            // Dxyn - DRW Vx, Vy, nibble
+            // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+            // The interpreter reads n bytes from memory, starting at the address stored in I. These bytes are then displayed
+            // as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen. If this causes any
+            // pixels to be erased, VF is set to 1, otherwise it is set to 0. If the sprite is positioned so part of it is
+            // outside the coordinates of the display, it wraps around to the opposite side of the screen.
+            // TODO Check if there is a collision
             (0xD, x, y, n) => {
-                let mut i: u8 = 0;
                 let v_x: u8 = self.registers[x as usize];
                 let v_y: u8 = self.registers[y as usize];
                 let screen_vertical_index: u8 = v_x / 8;
                 let reminder: u8 = v_x % 8;
-                println!("{} {} {} {}", v_x, v_y, screen_vertical_index, reminder);
-                for p in 0..n {
+                for i in 0..n {
                     let sprite_part = self.memory[(self.index + i as u16) as usize];
                     if reminder != 0 {
                         // Draw left part of the sprite
                         let sprite_left = sprite_part >> reminder;
-                        self.screen[(v_y + i) as usize][screen_vertical_index as usize] = self.memory[(self.index + i as u16) as usize] ;
+                        self.screen[(v_y + i) as usize][screen_vertical_index as usize] ^= sprite_left;
 
                         // Prevent screen overflow
                         if screen_vertical_index < 7 {
                             // Draw right part of the sprite
-                            let sprite_right = sprite_part << reminder;
-                            self.screen[(v_y + i) as usize][(screen_vertical_index + 1) as usize] = self.memory[(self.index + i as u16) as usize] ;
+                            let sprite_right = (sprite_part << (8 - reminder));
+                            self.screen[(v_y + i) as usize][(screen_vertical_index + 1) as usize] ^= sprite_right;
                         }
                     } else {
                         self.screen[(v_y + i) as usize][screen_vertical_index as usize] = sprite_part;
                     }
-                    i += 1;
                 }
 
                 self.print_screen();
                 Ok(())
-            },
+            }
 
+            // Fx18 - LD ST, Vx
+            // Set sound timer = Vx.
+            // ST is set equal to the value of Vx.
+            (0xF, x, 0x1, 0x8) => {
+                self.sound_timer = self.registers[x as usize];
+                Ok(())
+            }
+
+            // Fx29 - LD F, Vx
+            // Set I = location of sprite for digit Vx.
+            // The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx.
+            (0xF, x, 0x2, 0x9) => {
+                // We multiply by 4 beacuse every digit sprite starts at a multiple of 4
+                self.index = (self.registers[x as usize] * 4).into();
+                Ok(())
+            }
+
+            // Fx65 - LD Vx, [I]
+            // Read registers V0 through Vx from memory starting at location I.
+            // The interpreter reads values from memory starting at location I into registers V0 through Vx.
+            (0xF, x, 0x6, 0x5) => {
+                for i in 0..x {
+                    self.registers[i as usize] = self.memory[(self.index + i as u16) as usize];
+                }
+                Ok(())
+            }
 
             // Invalid opcodes
             _ => {
@@ -321,10 +387,10 @@ impl State {
         for y in 0..32 {
             for x in 0..8 {
                 for i in 0..8 {
-                    if (self.screen[y as usize][x as usize] >> i & 0x1) == 1 {
-                        print!("█");
+                    if ((self.screen[y as usize][x as usize] << i) & 0x80) == 0x80 {
+                        print!("██");
                     } else {
-                        print!(" ");
+                        print!("  ");
                     }
                 }
             }

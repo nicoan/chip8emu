@@ -5,3 +5,4 @@ authors = ["Nicolas Antinori <nicolas_antinori@hotmail.com>"]
 
 [dependencies]
 rand = "0.3"
+termion = "1.5.1"

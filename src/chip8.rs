@@ -2,8 +2,9 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Error;
 use rand::random;
-use termion::{cursor};
+use termion::{cursor, clear};
 use std::io::{Write, stdout, stdin};
+use std::{thread, time};
 
 // VF
 const FLAG_REGISTER: usize = 15;
@@ -27,6 +28,12 @@ const fontset: [u8; 80] =
   0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
   0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 ];
+
+pub enum MachineState {
+    SuccessfulExecution,
+    Draw,
+    WaitForKeyboard(u8),
+}
 
 // Represnts CHIP-8 current state
 pub struct State {
@@ -53,6 +60,9 @@ pub struct State {
 
     // Screen bitmap
     screen: [[u8; 8]; 32], // 32 rows of 8 u8 (64bits)
+
+    // Keypad
+    keypad: u16,
 
     // Timers
     delay_timer: u8,
@@ -85,25 +95,26 @@ impl State {
             registers: [0x0; 16],
             memory: memory,
             stack: [0x0; 16],
+            screen: [[0x0; 8]; 32],
+            keypad: 0x0,
             delay_timer: 0x0,
             sound_timer: 0x0,
-            screen: [[0x0; 8]; 32]
         })
     }
 
-    pub fn execute_instruction(&mut self) -> Result<(), String> {
+    pub fn execute_instruction(&mut self) -> Result<MachineState, String> {
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
-        let opcode_hex: String = format!("{:x}", opcode);
-        println!("{}", opcode_hex);
-        println!("{:?}", self.break_opcode(opcode));
+        //let opcode_hex: String = format!("{:x}", opcode);
+        //println!("{}", opcode_hex);
+        //println!("{:?}", self.break_opcode(opcode));
 
         match self.break_opcode(opcode) {
             // 00E0 - CLS
             // Clear the display.
             (0x0, 0x0, 0xE, 0x0) => {
                 self.screen = [[0x0; 8]; 32];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 00EE - RET
@@ -112,7 +123,7 @@ impl State {
             (0x0, 0x0, 0xE, 0xE) => {
                 self.pc = self.stack[self.sp];
                 self.sp -= 1;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             //1nnn - JP addr
@@ -121,7 +132,7 @@ impl State {
             (0x1, _, _, _) => {
                 let  address: u16 = opcode & 0x0FFF;
                 self.pc = address;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 2nnn - CALL addr
@@ -132,7 +143,7 @@ impl State {
                 self.sp += 1;
                 let  address: u16 = opcode & 0x0FFF;
                 self.pc = address;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 3xkk - SE Vx, byte
@@ -143,7 +154,7 @@ impl State {
                 if self.registers[r as usize] == kk {
                     self.pc += 2;
                 }
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 4xkk - SNE Vx, byte
@@ -154,7 +165,7 @@ impl State {
                 if self.registers[r as usize] != kk {
                     self.pc += 2;
                 }
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 5xy0 - SE Vx, Vy
@@ -164,7 +175,7 @@ impl State {
                 if self.registers[r1 as usize] == self.registers[r2 as usize] {
                     self.pc += 2;
                 }
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             //6xkk - LD Vx, byte
@@ -173,7 +184,7 @@ impl State {
             (0x6, x, _, _) => {
                 let kk: u8 = (opcode & 0x00FF) as u8;
                 self.registers[x as usize] = kk;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 7xkk - ADD Vx, byte
@@ -182,7 +193,7 @@ impl State {
             (0x7, r, _, _) => {
                 let kk: u8 = (opcode & 0x00FF) as u8;
                 self.registers[r as usize] += kk;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy0 - LD Vx, Vy
@@ -190,7 +201,7 @@ impl State {
             // Stores the value of register Vy in register Vx.
             (0x8, x, y, 0x0) => {
                 self.registers[x as usize] = self.registers[y as usize];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy1 - OR Vx, Vy
@@ -198,7 +209,7 @@ impl State {
             // Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx.
             (0x8, x, y, 0x1) => {
                 self.registers[x as usize] = self.registers[x as usize] | self.registers[y as usize];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy2 - AND Vx, Vy
@@ -206,7 +217,7 @@ impl State {
             // Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx.
             (0x8, x, y, 0x2) => {
                 self.registers[x as usize] = self.registers[x as usize] & self.registers[y as usize];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy3 - XOR Vx, Vy
@@ -214,7 +225,7 @@ impl State {
             // Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx.
             (0x8, x, y, 0x3) => {
                 self.registers[x as usize] = self.registers[x as usize] ^ self.registers[y as usize];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy4 - ADD Vx, Vy
@@ -226,7 +237,7 @@ impl State {
                 let result: u16 = (self.registers[x as usize] + self.registers[y as usize]).into();
                 self.registers[x as usize] = result as u8;
                 self.registers[FLAG_REGISTER] = if result > 255 { 1 } else { 0 };
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy5 - SUB Vx, Vy
@@ -235,7 +246,7 @@ impl State {
             (0x8, x, y, 0x5) => {
                 self.registers[FLAG_REGISTER] = if self.registers[x as usize] > self.registers[y as usize] { 1 } else { 0 };
                 self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy6 - SHR Vx {, Vy}
@@ -244,7 +255,7 @@ impl State {
             (0x8, x, y, 0x6) => {
                 self.registers[FLAG_REGISTER] = if 0x1 & self.registers[x as usize] == 1 { 1 } else { 0 };
                 self.registers[x as usize] = self.registers[x as usize] >> 1;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy7 - SUBN Vx, Vy
@@ -253,7 +264,7 @@ impl State {
             (0x8, x, y, 0x7) => {
                 self.registers[FLAG_REGISTER] = if self.registers[y as usize] > self.registers[x as usize] { 1 } else { 0 };
                 self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             //8xyE - SHL Vx {, Vy}
@@ -262,7 +273,7 @@ impl State {
             (0x8, x, y, 0xE) => {
                 self.registers[FLAG_REGISTER] = if self.registers[x as usize] >> 3 == 1 { 1 } else { 0 };
                 self.registers[x as usize] = (self.registers[x as usize] >> 1) | 0x8;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // 9xy0 - SNE Vx, Vy
@@ -272,14 +283,14 @@ impl State {
                 if self.registers[x as usize] != self.registers[y as usize] {
                     self.pc += 2;
                 }
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Annn - MVI nnn
             // Load index register with constant xxx
             (0xA, _, _, _) => {
                 self.index = opcode & 0x0FFF;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Bnnn - JP V0, addr
@@ -288,7 +299,7 @@ impl State {
             (0xB, _, _, _) => {
                 let address: u16 = opcode & 0x0FFF;
                 self.pc = address + self.registers[0 as usize] as u16;
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Cxkk - RND Vx, byte
@@ -299,7 +310,7 @@ impl State {
                 let random_number = random::<u8>();
                 self.registers[r as usize] = number & random_number;
                 //println!("{} - {} - {}", random_number, number, self.registers[r as usize]);
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Dxyn - DRW Vx, Vy, nibble
@@ -332,8 +343,54 @@ impl State {
                     }
                 }
 
-                self.print_screen();
-                Ok(())
+                Ok(MachineState::Draw)
+            }
+
+            // TODO in Exxx opcodes check the bit displacement (if its ok)
+
+            // Ex9E - SKP Vx
+            // Skip next instruction if key with the value of Vx is pressed.
+            // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position,
+            // PC is increased by 2.
+            (0xE, x, 0x9, 0xE) => {
+                if self.keypad >> self.registers[x as usize] & 0x1 == 1 {
+                    self.pc += 2;
+                }
+                Ok(MachineState::SuccessfulExecution)
+            }
+
+            // ExA1 - SKNP Vx
+            // Skip next instruction if key with the value of Vx is not pressed.
+            // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position,
+            // PC is increased by 2.
+            (0xE, x, 0xA, 0x1) => {
+                if (self.keypad >> self.registers[x as usize] & 0x1 == 1) {
+                    self.pc += 2;
+                }
+                Ok(MachineState::SuccessfulExecution)
+            }
+
+            // Fx07 - LD Vx, DT
+            // Set Vx = delay timer value.
+            // The value of DT is placed into Vx.
+            (0xF, x, 0x0, 0x7) => {
+                self.registers[x as usize] = self.delay_timer;
+                Ok(MachineState::SuccessfulExecution)
+            }
+
+            // Fx0A - LD Vx, K
+            // Wait for a key press, store the value of the key in Vx.
+            // All execution stops until a key is pressed, then the value of that key is stored in Vx.
+            (0xF, x, 0x0, 0xA) => {
+                Ok(MachineState::WaitForKeyboard(self.registers[x as usize]))
+            }
+
+            // Fx15 - LD DT, Vx
+            // Set delay timer = Vx.
+            // DT is set equal to the value of Vx.
+            (0xF, x, 0x1, 0x5) => {
+                self.delay_timer = self.registers[x as usize];
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Fx18 - LD ST, Vx
@@ -341,7 +398,15 @@ impl State {
             // ST is set equal to the value of Vx.
             (0xF, x, 0x1, 0x8) => {
                 self.sound_timer = self.registers[x as usize];
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
+            }
+
+            // Fx1E - ADD I, Vx
+            // Set I = I + Vx.
+            // The values of I and Vx are added, and the results are stored in I.
+            (0xF, x, 0x1, 0xE) => {
+                self.index += self.registers[x as usize] as u16;
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Fx29 - LD F, Vx
@@ -350,7 +415,24 @@ impl State {
             (0xF, x, 0x2, 0x9) => {
                 // We multiply by 4 beacuse every digit sprite starts at a multiple of 4
                 self.index = (self.registers[x as usize] * 4).into();
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
+            }
+
+            //Fx33 - LD B, Vx
+            //Store BCD representation of Vx in memory locations I, I+1, and I+2.
+            //The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
+
+
+            //Fx55 - LD [I], Vx
+            //Store registers V0 through Vx in memory starting at location I.
+            //The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
+            (0xF, x, 0x5, 0x5) => {
+                let n: u8 = self.registers[x as usize];
+                for i in 0..n {
+                    let index: usize = (self.index + i as u16) as usize;
+                    self.memory[index] = self.registers[i as usize];
+                }
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Fx65 - LD Vx, [I]
@@ -360,15 +442,20 @@ impl State {
                 for i in 0..x {
                     self.registers[i as usize] = self.memory[(self.index + i as u16) as usize];
                 }
-                Ok(())
+                Ok(MachineState::SuccessfulExecution)
             }
 
             // Invalid opcodes
             _ => {
-                println!("Invalid opcode");
-                Err("Invalid opcode".to_string())
+                let errorMessage: String = format!("Critical error: attempted to execute {:x} (invalid opcode)", opcode);
+                Err(errorMessage)
             }
         }
+    }
+
+    pub fn wait_key_press(&mut self, key: u8) {
+        println!("pressed {}", key);
+        thread::sleep(time::Duration::from_millis(1000));
     }
 
     fn get_opcode(&mut self) -> Result<u16, String> {
@@ -383,7 +470,7 @@ impl State {
          (opcode & 0xF) as u8)
     }
 
-    fn print_screen(&mut self) {
+    fn print_screen2(&mut self) {
         for y in 0..32 {
             for x in 0..8 {
                 for i in 0..8 {
@@ -396,6 +483,30 @@ impl State {
             }
             println!(" ")
         }
+    }
+
+    pub fn print_screen(&mut self) {
+        println!("{}", clear::All);
+        let stdout = stdout();
+        let mut stdout = stdout.lock();
+        for y in (0..16).map(|x| x * 2) {
+            for x in 0..8 {
+                for i in 0..8 {
+                    let top_square: bool = (self.screen[y as usize][x as usize] << i) & 0x80 == 0x80;
+                    let bottom_square: bool = (self.screen[y + 1 as usize][x as usize] << i) & 0x80 == 0x80;
+                    let x_coord = (x * 8) + i + 2;
+                    let y_coord: u16 = (y / 2) as u16 + 2;
+                    match (top_square, bottom_square) {
+                        (true, true) => write!(stdout, "█{}", cursor::Goto(x_coord, y_coord)).unwrap(),
+                        (true, false) => write!(stdout, "▀{}", cursor::Goto(x_coord, y_coord)).unwrap(),
+                        (false, true) => write!(stdout, "▄{}", cursor::Goto(x_coord, y_coord)).unwrap(),
+                        (false, false) => write!(stdout, " {}", cursor::Goto(x_coord, y_coord)).unwrap()
+                    }
+                }
+            }
+        }
+        println!("");
+        stdout.flush().unwrap();
     }
 }
 

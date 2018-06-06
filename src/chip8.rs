@@ -9,7 +9,7 @@ use std::{thread, time};
 // VF
 const FLAG_REGISTER: usize = 15;
 
-const fontset: [u8; 80] =
+const FONTSET: [u8; 80] =
 [
   0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
   0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -37,9 +37,6 @@ pub enum MachineState {
 
 // Represnts CHIP-8 current state
 pub struct State {
-    // Current opcode
-    opcode: u16,
-
     // Main memory
     memory: [u8; 4096],
 
@@ -73,9 +70,9 @@ impl State {
     pub fn new(filename: String) -> Result<State, Error> {
         let mut memory: [u8; 4096] = [0x0; 4096];
 
-        // Load the fontset
+        // Load the FONTSET
         for i in 0..80 {
-            memory[0x50 + i] = fontset[i];
+            memory[0x50 + i] = FONTSET[i];
         }
 
         // Read CHIP-8 File
@@ -88,7 +85,6 @@ impl State {
         }
 
         Ok(State {
-            opcode: 0x0,
             pc: 0x200,
             index: 0x0,
             sp: 0x0,
@@ -102,12 +98,28 @@ impl State {
         })
     }
 
-    pub fn execute_instruction(&mut self) -> Result<MachineState, String> {
+    pub fn execute_cycle(&mut self) -> Result<MachineState, String> {
+        let result = self.execute_instruction();
+        // Decrease delay timer
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+        // TODO Implement beep!
+        // if self.sound_timer == 1 {
+        //    beep(440. * si::HZ);
+        // }
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
+        return result;
+    }
+
+    fn execute_instruction(&mut self) -> Result<MachineState, String> {
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
-        //let opcode_hex: String = format!("{:x}", opcode);
-        //println!("{}", opcode_hex);
-        //println!("{:?}", self.break_opcode(opcode));
+        // let opcode_hex: String = format!("{:x}", opcode);
+        // println!("{}", opcode_hex);
+        // println!("{:?}", self.break_opcode(opcode));
 
         match self.break_opcode(opcode) {
             // 00E0 - CLS
@@ -119,10 +131,11 @@ impl State {
 
             // 00EE - RET
             // Return from a subroutine.
-            // The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
+            // The interpreter sets the program counter to the address at the top of the stack, then subtracts 1
+            // from the stack pointer.
             (0x0, 0x0, 0xE, 0xE) => {
-                self.pc = self.stack[self.sp];
                 self.sp -= 1;
+                self.pc = self.stack[self.sp];
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -137,7 +150,8 @@ impl State {
 
             // 2nnn - CALL addr
             // Call subroutine at nnn.
-            // The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn.
+            // The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC
+            // is then set to nnn.
             (0x2, _, _, _) => {
                 self.stack[self.sp] = self.pc;
                 self.sp += 1;
@@ -190,9 +204,10 @@ impl State {
             // 7xkk - ADD Vx, byte
             // Set Vx = Vx + kk.
             // Adds the value kk to the value of register Vx, then stores the result in Vx.
-            (0x7, r, _, _) => {
-                let kk: u8 = (opcode & 0x00FF) as u8;
-                self.registers[r as usize] += kk;
+            (0x7, x, _, _) => {
+                let kk: u16 = opcode & 0x00FF;
+                let result: u16 = (self.registers[x as usize] as u16 + kk) % 256;
+                self.registers[x as usize] = result as u8;
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -234,8 +249,8 @@ impl State {
             // otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
             (0x8, x, y, 0x4) => {
                 // TODO: Check the into, not sure how it works
-                let result: u16 = (self.registers[x as usize] + self.registers[y as usize]).into();
-                self.registers[x as usize] = result as u8;
+                let result: u16 = self.registers[x as usize] as u16 + self.registers[y as usize] as u16;
+                self.registers[x as usize] = (result % 256) as u8;
                 self.registers[FLAG_REGISTER] = if result > 255 { 1 } else { 0 };
                 Ok(MachineState::SuccessfulExecution)
             }
@@ -244,17 +259,24 @@ impl State {
             // Set Vx = Vx - Vy, set VF = NOT borrow.
             // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
             (0x8, x, y, 0x5) => {
-                self.registers[FLAG_REGISTER] = if self.registers[x as usize] > self.registers[y as usize] { 1 } else { 0 };
-                self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize];
+                println!("{} {}", self.registers[x as usize], self.registers[y as usize]);
+                if self.registers[x as usize] > self.registers[y as usize] {
+                    self.registers[FLAG_REGISTER] = 1;
+                    self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize]
+                } else {
+                    self.registers[FLAG_REGISTER] = 0;
+                    self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
+                }
                 Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy6 - SHR Vx {, Vy}
             // Set Vx = Vx SHR 1.
-            // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
+            // Store the value of register VY shifted right one bit in register VX. Set register VF to the least significant
+            // bit prior to the shift
             (0x8, x, y, 0x6) => {
-                self.registers[FLAG_REGISTER] = if 0x1 & self.registers[x as usize] == 1 { 1 } else { 0 };
-                self.registers[x as usize] = self.registers[x as usize] >> 1;
+                self.registers[FLAG_REGISTER] = if 0x1 & self.registers[y as usize] == 1 { 1 } else { 0 };
+                self.registers[x as usize] = self.registers[y as usize] >> 1;
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -262,17 +284,22 @@ impl State {
             // Set Vx = Vy - Vx, set VF = NOT borrow.
             // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
             (0x8, x, y, 0x7) => {
-                self.registers[FLAG_REGISTER] = if self.registers[y as usize] > self.registers[x as usize] { 1 } else { 0 };
-                self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
+                if self.registers[y as usize] > self.registers[x as usize] {
+                    self.registers[FLAG_REGISTER] = 1;
+                    self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
+                } else {
+                    self.registers[FLAG_REGISTER] = 0;
+                    self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize];
+                }
                 Ok(MachineState::SuccessfulExecution)
             }
 
             //8xyE - SHL Vx {, Vy}
-            //Set Vx = Vx SHL 1.
-            //If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
+            // Store the value of register VY shifted left one bit in register VX. Set register VF to the most significant
+            // bit prior to the shift
             (0x8, x, y, 0xE) => {
-                self.registers[FLAG_REGISTER] = if self.registers[x as usize] >> 3 == 1 { 1 } else { 0 };
-                self.registers[x as usize] = (self.registers[x as usize] >> 1) | 0x8;
+                self.registers[FLAG_REGISTER] = if self.registers[y as usize] & 0x8 == 0x8 { 1 } else { 0 };
+                self.registers[x as usize] = self.registers[y as usize] << 1;
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -309,7 +336,6 @@ impl State {
                 let number: u8 = (opcode & 0x00FF) as u8;
                 let random_number = random::<u8>();
                 self.registers[r as usize] = number & random_number;
-                //println!("{} - {} - {}", random_number, number, self.registers[r as usize]);
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -327,20 +353,21 @@ impl State {
                 let reminder: u8 = v_x % 8;
                 for i in 0..n {
                     let sprite_part = self.memory[(self.index + i as u16) as usize];
-                    if reminder != 0 {
-                        // Draw left part of the sprite
-                        let sprite_left = sprite_part >> reminder;
-                        self.screen[(v_y + i) as usize][screen_vertical_index as usize] ^= sprite_left;
+                    // Prevent screen overflow
 
-                        // Prevent screen overflow
-                        if screen_vertical_index < 7 {
+                        if reminder != 0 {
+                            // Draw left part of the sprite
+                            let sprite_left = sprite_part >> reminder;
+                            self.screen[(v_y + i) as usize][screen_vertical_index as usize] ^= sprite_left;
+
                             // Draw right part of the sprite
-                            let sprite_right = (sprite_part << (8 - reminder));
-                            self.screen[(v_y + i) as usize][(screen_vertical_index + 1) as usize] ^= sprite_right;
+                            if screen_vertical_index < 7 {
+                                let sprite_right = sprite_part << (8 - reminder);
+                                self.screen[(v_y + i) as usize][(screen_vertical_index + 1) as usize] ^= sprite_right;
+                            }
+                        } else {
+                            self.screen[(v_y + i) as usize][screen_vertical_index as usize] = sprite_part;
                         }
-                    } else {
-                        self.screen[(v_y + i) as usize][screen_vertical_index as usize] = sprite_part;
-                    }
                 }
 
                 Ok(MachineState::Draw)
@@ -364,7 +391,7 @@ impl State {
             // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position,
             // PC is increased by 2.
             (0xE, x, 0xA, 0x1) => {
-                if (self.keypad >> self.registers[x as usize] & 0x1 == 1) {
+                if self.keypad >> self.registers[x as usize] & 0x1 == 1 {
                     self.pc += 2;
                 }
                 Ok(MachineState::SuccessfulExecution)
@@ -382,6 +409,9 @@ impl State {
             // Wait for a key press, store the value of the key in Vx.
             // All execution stops until a key is pressed, then the value of that key is stored in Vx.
             (0xF, x, 0x0, 0xA) => {
+                let stdin = stdin();
+                let iterator = stdin.lock();
+                //println!("{}", iterator.next().unwrap().unwrap());
                 Ok(MachineState::WaitForKeyboard(self.registers[x as usize]))
             }
 
@@ -418,44 +448,52 @@ impl State {
                 Ok(MachineState::SuccessfulExecution)
             }
 
-            //Fx33 - LD B, Vx
-            //Store BCD representation of Vx in memory locations I, I+1, and I+2.
-            //The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
+            // Fx33 - LD B, Vx
+            // Store BCD representation of Vx in memory locations I, I+1, and I+2.
+            // The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I,
+            // the tens digit at location I+1, and the ones digit at location I+2.
+            (0xF, x, 0x3, 0x3) => {
+                self.memory[self.index as usize] = self.registers[x as usize] / 100;
+                self.memory[(self.index + 1) as usize] = (self.registers[x as usize] % 100) / 10;
+                self.memory[(self.index + 2) as usize] = self.registers[x as usize] % 10;
+                Ok(MachineState::SuccessfulExecution)
+            }
 
-
-            //Fx55 - LD [I], Vx
-            //Store registers V0 through Vx in memory starting at location I.
-            //The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
+            // Fx55 - LD [I], Vx
+            // Store registers V0 through Vx inclusive in memory starting at location I.
+            // The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
+            // I is set to I + X + 1 after operation
             (0xF, x, 0x5, 0x5) => {
-                let n: u8 = self.registers[x as usize];
-                for i in 0..n {
+                for i in 0..(x + 1) {
                     let index: usize = (self.index + i as u16) as usize;
-                    self.memory[index] = self.registers[i as usize];
+                    self.memory[(index)] = self.registers[i as usize];
                 }
+                self.index += (x + 1) as u16;
                 Ok(MachineState::SuccessfulExecution)
             }
 
             // Fx65 - LD Vx, [I]
-            // Read registers V0 through Vx from memory starting at location I.
+            // Read registers V0 through Vx incluse from memory starting at location I.
             // The interpreter reads values from memory starting at location I into registers V0 through Vx.
             (0xF, x, 0x6, 0x5) => {
-                for i in 0..x {
+                for i in 0..(x + 1) {
                     self.registers[i as usize] = self.memory[(self.index + i as u16) as usize];
                 }
+                self.index += (x + 1) as u16;
                 Ok(MachineState::SuccessfulExecution)
             }
 
             // Invalid opcodes
             _ => {
-                let errorMessage: String = format!("Critical error: attempted to execute {:x} (invalid opcode)", opcode);
-                Err(errorMessage)
+                let error_message: String = format!("Critical error: attempted to execute {:x} (invalid opcode)", opcode);
+                Err(error_message)
             }
         }
     }
 
     pub fn wait_key_press(&mut self, key: u8) {
         println!("pressed {}", key);
-        thread::sleep(time::Duration::from_millis(1000));
+        //thread::sleep(time::Duration::from_millis(1000));
     }
 
     fn get_opcode(&mut self) -> Result<u16, String> {
@@ -486,7 +524,6 @@ impl State {
     }
 
     pub fn print_screen(&mut self) {
-        println!("{}", clear::All);
         let stdout = stdout();
         let mut stdout = stdout.lock();
         for y in (0..16).map(|x| x * 2) {

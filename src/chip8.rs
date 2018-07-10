@@ -6,6 +6,7 @@ use termion::{cursor, clear};
 use termion::raw::IntoRawMode;
 use std::io::{Write, stdout, stdin};
 use std::{thread, time};
+use termion::raw::RawTerminal;
 
 // VF
 const FLAG_REGISTER: usize = 15;
@@ -72,8 +73,8 @@ impl State {
         let mut memory: [u8; 4096] = [0x0; 4096];
 
         // Load the FONTSET
-        for i in 0..80 {
-            memory[0x50 + i] = FONTSET[i];
+        for i in 0..0x50 {
+            memory[i] = FONTSET[i];
         }
 
         // Read CHIP-8 File
@@ -260,7 +261,6 @@ impl State {
             // Set Vx = Vx - Vy, set VF = NOT borrow.
             // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
             (0x8, x, y, 0x5) => {
-                println!("{} {}", self.registers[x as usize], self.registers[y as usize]);
                 if self.registers[x as usize] > self.registers[y as usize] {
                     self.registers[FLAG_REGISTER] = 1;
                     self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize]
@@ -346,7 +346,6 @@ impl State {
             // as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen. If this causes any
             // pixels to be erased, VF is set to 1, otherwise it is set to 0. If the sprite is positioned so part of it is
             // outside the coordinates of the display, it wraps around to the opposite side of the screen.
-            // TODO Check if there is a collision
             (0xD, x, y, n) => {
                 let v_x: u8 = self.registers[x as usize];
                 let v_y: u8 = self.registers[y as usize];
@@ -418,7 +417,6 @@ impl State {
             (0xF, x, 0x0, 0xA) => {
                 let stdin = stdin();
                 let iterator = stdin.lock();
-                //println!("{}", iterator.next().unwrap().unwrap());
                 Ok(MachineState::WaitForKeyboard(self.registers[x as usize]))
             }
 
@@ -543,28 +541,66 @@ impl State {
         }
     }
 
-    pub fn print_screen(&mut self) {
-        thread::sleep(time::Duration::from_millis(200));
+    // This goes in renderer module
+    // remove _render from name
+    pub fn initialize_render(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
+        write!(stdout, "{}", clear::All).unwrap();
         write!(stdout, "{}", cursor::Hide);
+        self.draw_screen_box();
+    }   
+
+    fn draw_screen_box(&mut self) {
+        let mut stdout = stdout().into_raw_mode().unwrap();
+        write!(stdout, "{}", clear::All).unwrap();
+        // Top row
+        write!(stdout, "{}┌", cursor::Goto(1, 1)).unwrap();
+        for i in 2..66 {
+            write!(stdout, "{}─", cursor::Goto(i, 1)).unwrap();
+        }
+        write!(stdout, "{}┐", cursor::Goto(66, 1)).unwrap();
+
+        // Vertical rows
+        for i in 2..18 {
+            write!(stdout, "{}│", cursor::Goto(1, i)).unwrap();
+            write!(stdout, "{}│", cursor::Goto(66, i)).unwrap();
+        }
+
+        // Bottom row
+        write!(stdout, "{}└", cursor::Goto(1, 18)).unwrap();
+        for i in 2..66 {
+            write!(stdout, "{}─", cursor::Goto(i, 18)).unwrap();
+        }
+        write!(stdout, "{}┘", cursor::Goto(66, 18)).unwrap();
+    }
+
+    // This goes in renderer module
+    pub fn print_screen(&mut self) {
+        let mut stdout = stdout().into_raw_mode().unwrap();
+        //thread::sleep(time::Duration::from_millis(200));
+        // Move this to some kind of global 
+        const padding: u16 = 2;
         for y in (0..16).map(|x| x * 2) {
             for x in 0..8 {
                 for i in 0..8 {
                     let top_square: bool = (self.screen[y as usize][x as usize] << i) & 0x80 == 0x80;
                     let bottom_square: bool = (self.screen[y + 1 as usize][x as usize] << i) & 0x80 == 0x80;
-                    let x_coord = (x * 8) + i + 2;
-                    let y_coord: u16 = (y / 2) as u16 + 2;
+                    let x_coord = (x * 8) + i + padding;
+                    let y_coord: u16 = (y / 2) as u16 + padding;
                     match (top_square, bottom_square) {
-                        (true, true) => write!(stdout, "█{}", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (true, false) => write!(stdout, "▀{}", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (false, true) => write!(stdout, "▄{}", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (false, false) => write!(stdout, " {}", cursor::Goto(x_coord, y_coord)).unwrap()
+                        (true, true) => write!(stdout, "{}█", cursor::Goto(x_coord, y_coord)).unwrap(),
+                        (true, false) => write!(stdout, "{}▀", cursor::Goto(x_coord, y_coord)).unwrap(),
+                        (false, true) => write!(stdout, "{}▄", cursor::Goto(x_coord, y_coord)).unwrap(),
+                        (false, false) => write!(stdout, "{} ", cursor::Goto(x_coord, y_coord)).unwrap()
                     }
                 }
             }
         }
         stdout.flush().unwrap();
     }
+
+
+
 }
 
 

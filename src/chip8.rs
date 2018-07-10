@@ -3,6 +3,7 @@ use std::io::Read;
 use std::io::Error;
 use rand::random;
 use termion::{cursor, clear};
+use termion::raw::IntoRawMode;
 use std::io::{Write, stdout, stdin};
 use std::{thread, time};
 
@@ -349,24 +350,30 @@ impl State {
             (0xD, x, y, n) => {
                 let v_x: u8 = self.registers[x as usize];
                 let v_y: u8 = self.registers[y as usize];
-                let screen_vertical_index: u8 = v_x / 8;
+                let screen_horizontal_index: u8 = v_x / 8;
                 let reminder: u8 = v_x % 8;
+                self.registers[FLAG_REGISTER] = 0;
                 for i in 0..n {
                     let sprite_part = self.memory[(self.index + i as u16) as usize];
                     // Prevent screen overflow
-
                         if reminder != 0 {
                             // Draw left part of the sprite
                             let sprite_left = sprite_part >> reminder;
-                            self.screen[(v_y + i) as usize][screen_vertical_index as usize] ^= sprite_left;
+                            let left_screen_part = self.screen[(v_y + i) as usize][screen_horizontal_index as usize];
+                            self.check_collision(left_screen_part, sprite_left);
+                            self.screen[(v_y + i) as usize][screen_horizontal_index as usize] ^= sprite_left;
 
                             // Draw right part of the sprite
-                            if screen_vertical_index < 7 {
+                            if screen_horizontal_index < 7 {
                                 let sprite_right = sprite_part << (8 - reminder);
-                                self.screen[(v_y + i) as usize][(screen_vertical_index + 1) as usize] ^= sprite_right;
+                                let right_screen_part = self.screen[(v_y + i) as usize][(screen_horizontal_index + 1) as usize];
+                                self.check_collision(right_screen_part, sprite_right);
+                                self.screen[(v_y + i) as usize][(screen_horizontal_index + 1) as usize] ^= sprite_right;
                             }
                         } else {
-                            self.screen[(v_y + i) as usize][screen_vertical_index as usize] = sprite_part;
+                            let screen_part = self.screen[(v_y + i) as usize][screen_horizontal_index as usize];
+                            self.check_collision(screen_part, sprite_part);
+                            self.screen[(v_y + i) as usize][screen_horizontal_index as usize] ^= sprite_part;
                         }
                 }
 
@@ -508,7 +515,20 @@ impl State {
          (opcode & 0xF) as u8)
     }
 
-    fn print_screen2(&mut self) {
+    fn check_collision(&mut self, screen_byte: u8, sprite_byte: u8) {
+        if self.registers[FLAG_REGISTER] != 1 {
+            let mut bit_to_check: u8 = 1;
+            for i in 0..8 {
+                bit_to_check = bit_to_check  << i;
+                if screen_byte & bit_to_check == 1 && sprite_byte & bit_to_check == 1 {
+                    self.registers[FLAG_REGISTER] = 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    pub fn print_screen2(&mut self) {
         for y in 0..32 {
             for x in 0..8 {
                 for i in 0..8 {
@@ -524,8 +544,9 @@ impl State {
     }
 
     pub fn print_screen(&mut self) {
-        let stdout = stdout();
-        let mut stdout = stdout.lock();
+        thread::sleep(time::Duration::from_millis(200));
+        let mut stdout = stdout().into_raw_mode().unwrap();
+        write!(stdout, "{}", cursor::Hide);
         for y in (0..16).map(|x| x * 2) {
             for x in 0..8 {
                 for i in 0..8 {
@@ -542,7 +563,6 @@ impl State {
                 }
             }
         }
-        println!("");
         stdout.flush().unwrap();
     }
 }

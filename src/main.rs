@@ -9,7 +9,8 @@ use chip8::{MachineState};
 use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
-use std::io::{Write, stdout, stdin};
+//use std::io::{Write, stdout, stdin};
+use std::io::{stdin, stdout, Read, Write};
 
 /*fn main() {
     // Get the standard input stream.
@@ -55,14 +56,16 @@ use std::io::{Write, stdout, stdin};
 
 
 fn main() {
-    //let mut vm = chip8::State::new("/home/lilo/Proyectos/c8games/TICTAC".to_string()).unwrap();
-    let mut vm = chip8::State::new("/home/nico/Downloads/chp8_220/CHIP8/GAMES/MAZE".to_string()).unwrap();
-    //thread::spawn(|| { keyboard_listener() });
+    //let mut vm = chip8::State::new("/home/nico/Downloads/chp8_220/CHIP8/GAMES/BC_test.ch8".to_string()).unwrap();
+    let mut vm = chip8::State::new("/home/nico/Downloads/chp8_220/CHIP8/GAMES/TETRIS".to_string()).unwrap();
+    //let mut vm = chip8::State::new("/home/nico/Downloads/chp8_220/CHIP8/GAMES/MAZE".to_string()).unwrap();
+    thread::spawn(|| { keyboard_listener() });
     vm.initialize_render();
     loop {
+        //pause();
         match vm.execute_cycle() {
             Ok(MachineState::SuccessfulExecution) => continue,
-            Ok(MachineState::WaitForKeyboard(k)) => vm.wait_key_press(k),
+            Ok(MachineState::WaitForKeyboard(k)) => keyboard_listener(),
             Ok(MachineState::Draw) => vm.print_screen(),
             Err(error) => {
                 println!("{}", error);
@@ -73,6 +76,12 @@ fn main() {
     }
 
     println!("Hello world!");
+}
+
+fn pause() {
+    let mut stdout = stdout();
+    stdout.flush().unwrap();
+    stdin().read(&mut [0]).unwrap();
 }
 
 fn keyboard_listener() {

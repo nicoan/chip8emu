@@ -117,11 +117,9 @@ impl State {
     }
 
     fn execute_instruction(&mut self) -> Result<MachineState, String> {
+        //self.print_registers();
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
-        // let opcode_hex: String = format!("{:x}", opcode);
-        // println!("{}", opcode_hex);
-        // println!("{:?}", self.break_opcode(opcode));
 
         match self.break_opcode(opcode) {
             // 00E0 - CLS
@@ -266,7 +264,7 @@ impl State {
                     self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize]
                 } else {
                     self.registers[FLAG_REGISTER] = 0;
-                    self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
+                    self.registers[x as usize] = (256 - (self.registers[y as usize] - self.registers[x as usize]) as u16) as u8;
                 }
                 Ok(MachineState::SuccessfulExecution)
             }
@@ -299,7 +297,7 @@ impl State {
             // Store the value of register VY shifted left one bit in register VX. Set register VF to the most significant
             // bit prior to the shift
             (0x8, x, y, 0xE) => {
-                self.registers[FLAG_REGISTER] = if self.registers[y as usize] & 0x8 == 0x8 { 1 } else { 0 };
+                self.registers[FLAG_REGISTER] = self.registers[x as usize] & 0x8;
                 self.registers[x as usize] = self.registers[y as usize] << 1;
                 Ok(MachineState::SuccessfulExecution)
             }
@@ -347,6 +345,7 @@ impl State {
             // pixels to be erased, VF is set to 1, otherwise it is set to 0. If the sprite is positioned so part of it is
             // outside the coordinates of the display, it wraps around to the opposite side of the screen.
             (0xD, x, y, n) => {
+                        let mut stdout = stdout().into_raw_mode().unwrap();
                 let v_x: u8 = self.registers[x as usize];
                 let v_y: u8 = self.registers[y as usize];
                 let screen_horizontal_index: u8 = v_x / 8;
@@ -358,6 +357,8 @@ impl State {
                         if reminder != 0 {
                             // Draw left part of the sprite
                             let sprite_left = sprite_part >> reminder;
+                            write!(stdout, "{}", cursor::Goto(67, 1)).unwrap();
+                            println!("{} {} {} {} {}                    ", n, v_y, i, (v_y + i), screen_horizontal_index);
                             let left_screen_part = self.screen[(v_y + i) as usize][screen_horizontal_index as usize];
                             self.check_collision(left_screen_part, sprite_left);
                             self.screen[(v_y + i) as usize][screen_horizontal_index as usize] ^= sprite_left;
@@ -417,7 +418,10 @@ impl State {
             (0xF, x, 0x0, 0xA) => {
                 let stdin = stdin();
                 let iterator = stdin.lock();
-                Ok(MachineState::WaitForKeyboard(self.registers[x as usize]))
+                self.pc -= 2;
+                Ok(MachineState::SuccessfulExecution)
+
+                //Ok(MachineState::WaitForKeyboard(self.registers[x as usize]))
             }
 
             // Fx15 - LD DT, Vx
@@ -448,8 +452,7 @@ impl State {
             // Set I = location of sprite for digit Vx.
             // The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx.
             (0xF, x, 0x2, 0x9) => {
-                // We multiply by 4 beacuse every digit sprite starts at a multiple of 4
-                self.index = (self.registers[x as usize] * 4).into();
+                self.index = (self.registers[x as usize] * 5).into();
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -482,7 +485,7 @@ impl State {
             // The interpreter reads values from memory starting at location I into registers V0 through Vx.
             (0xF, x, 0x6, 0x5) => {
                 for i in 0..(x + 1) {
-                    self.registers[i as usize] = self.memory[(self.index + i as u16) as usize];
+                    self.registers[i as usize] = self.memory[(self.index + i as u16) as usize] as u8;
                 }
                 self.index += (x + 1) as u16;
                 Ok(MachineState::SuccessfulExecution)
@@ -574,10 +577,11 @@ impl State {
         write!(stdout, "{}┘", cursor::Goto(66, 18)).unwrap();
     }
 
+
+
     // This goes in renderer module
     pub fn print_screen(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
-        //thread::sleep(time::Duration::from_millis(200));
         // Move this to some kind of global 
         const padding: u16 = 2;
         for y in (0..16).map(|x| x * 2) {
@@ -596,6 +600,28 @@ impl State {
                 }
             }
         }
+        stdout.flush().unwrap();
+    }
+
+    // DEBUGGING
+
+    fn print_registers(&mut self) {
+        let mut stdout = stdout().into_raw_mode().unwrap();
+        // Top row
+        for i in (1..17) {
+            write!(stdout, "{}", cursor::Goto(67, i)).unwrap();
+            println!("V{:x} - {:x}         ", i - 1, self.registers[(i - 1) as usize]);
+        }
+
+        write!(stdout, "{}", cursor::Goto(67, 19)).unwrap();
+        println!("I - {:x}         ", self.index);
+
+        write!(stdout, "{}", cursor::Goto(67, 20)).unwrap();
+        println!("PC - {:x}         ", self.pc);
+        write!(stdout, "{}", cursor::Goto(67, 21)).unwrap();
+        println!("SP - {:x}         ", self.sp);
+        write!(stdout, "{}", cursor::Goto(67, 22)).unwrap();
+        println!("OPCODE - {:x}", (self.memory[self.pc as usize] as u16) << 0x8 | (self.memory[(self.pc + 1) as usize] as u16));
         stdout.flush().unwrap();
     }
 

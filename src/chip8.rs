@@ -5,8 +5,6 @@ use rand::random;
 use termion::{cursor, clear};
 use termion::raw::IntoRawMode;
 use std::io::{Write, stdout, stdin};
-use std::{thread, time};
-use termion::raw::RawTerminal;
 
 // VF
 const FLAG_REGISTER: usize = 15;
@@ -266,18 +264,17 @@ impl State {
                     self.registers[x as usize] = self.registers[x as usize] - self.registers[y as usize]
                 } else {
                     self.registers[FLAG_REGISTER] = 0;
-                    self.registers[x as usize] = (256 - (self.registers[y as usize] - self.registers[x as usize]) as u16) as u8;
+                    self.registers[x as usize] = self.registers[y as usize] - self.registers[x as usize];
                 }
                 Ok(MachineState::SuccessfulExecution)
             }
 
             // 8xy6 - SHR Vx {, Vy}
             // Set Vx = Vx SHR 1.
-            // Store the value of register VY shifted right one bit in register VX. Set register VF to the least significant
-            // bit prior to the shift
+            // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
             (0x8, x, y, 0x6) => {
-                self.registers[FLAG_REGISTER] = if 0x1 & self.registers[y as usize] == 1 { 1 } else { 0 };
-                self.registers[x as usize] = self.registers[y as usize] >> 1;
+                self.registers[FLAG_REGISTER] = self.registers[x as usize] & 0x1;
+                self.registers[x as usize] = self.registers[x as usize] >> 1;
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -296,11 +293,11 @@ impl State {
             }
 
             //8xyE - SHL Vx {, Vy}
-            // Store the value of register VY shifted left one bit in register VX. Set register VF to the most significant
-            // bit prior to the shift
+            // Set Vx = Vx SHL 1.
+            // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
             (0x8, x, y, 0xE) => {
-                self.registers[FLAG_REGISTER] = self.registers[x as usize] & 0x8;
-                self.registers[x as usize] = self.registers[y as usize] << 1;
+                self.registers[FLAG_REGISTER] = self.registers[x as usize] >> 7;
+                self.registers[x as usize] <<= 1;
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -369,12 +366,13 @@ impl State {
 
                     // Write right screen part
                     if (reminder != 0) {
+                        let v_x_right = ((v_x + 1) as u8 % BYTES_WIDTH) as usize;
                         let sprite_right = sprite << (8 - reminder);
-                        let right_screen_part = self.screen[v_y][v_x + 1];
+                        let right_screen_part = self.screen[v_y][v_x_right];
                         if (right_screen_part & sprite_right > 0) {
                             self.registers[FLAG_REGISTER] = 1
                         }
-                        self.screen[v_y][v_x + 1] ^= sprite_right;
+                        self.screen[v_y][v_x_right] ^= sprite_right;
                     }
                 }
 
@@ -473,13 +471,13 @@ impl State {
             // Fx55 - LD [I], Vx
             // Store registers V0 through Vx inclusive in memory starting at location I.
             // The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
-            // I is set to I + X + 1 after operation
+            // I is set to I + X + 1 after operation -> Maybe not
             (0xF, x, 0x5, 0x5) => {
                 for i in 0..(x + 1) {
                     let index: usize = (self.index + i as u16) as usize;
                     self.memory[(index)] = self.registers[i as usize];
                 }
-                self.index += (x + 1) as u16;
+                //self.index += (x + 1) as u16;
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -490,7 +488,7 @@ impl State {
                 for i in 0..(x + 1) {
                     self.registers[i as usize] = self.memory[(self.index + i as u16) as usize] as u8;
                 }
-                self.index += (x + 1) as u16;
+                //self.index += (x + 1) as u16;
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -517,21 +515,6 @@ impl State {
          (opcode >> 8 & 0xF) as u8,
          (opcode >> 4 & 0xF) as u8,
          (opcode & 0xF) as u8)
-    }
-
-    pub fn print_screen2(&mut self) {
-        for y in 0..32 {
-            for x in 0..8 {
-                for i in 0..8 {
-                    if ((self.screen[y as usize][x as usize] << i) & 0x80) == 0x80 {
-                        print!("██");
-                    } else {
-                        print!("  ");
-                    }
-                }
-            }
-            println!(" ")
-        }
     }
 
     // This goes in renderer module

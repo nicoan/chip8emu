@@ -272,7 +272,7 @@ impl State {
             // 8xy6 - SHR Vx {, Vy}
             // Set Vx = Vx SHR 1.
             // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
-            (0x8, x, y, 0x6) => {
+            (0x8, x, _, 0x6) => {
                 self.registers[FLAG_REGISTER] = self.registers[x as usize] & 0x1;
                 self.registers[x as usize] = self.registers[x as usize] >> 1;
                 Ok(MachineState::SuccessfulExecution)
@@ -359,17 +359,17 @@ impl State {
                     let sprite_left = sprite >> reminder;
                     let v_y: usize = ((initial_v_y + i) % BYTES_HEIGHT) as usize;
                     let left_screen_part = self.screen[v_y][v_x];
-                    if (left_screen_part & sprite_left > 0) {
+                    if left_screen_part & sprite_left > 0 {
                         self.registers[FLAG_REGISTER] = 1
                     }
                     self.screen[v_y][v_x] ^= sprite_left;
 
                     // Write right screen part
-                    if (reminder != 0) {
+                    if reminder != 0 {
                         let v_x_right = ((v_x + 1) as u8 % BYTES_WIDTH) as usize;
                         let sprite_right = sprite << (8 - reminder);
                         let right_screen_part = self.screen[v_y][v_x_right];
-                        if (right_screen_part & sprite_right > 0) {
+                        if right_screen_part & sprite_right > 0 {
                             self.registers[FLAG_REGISTER] = 1
                         }
                         self.screen[v_y][v_x_right] ^= sprite_right;
@@ -522,7 +522,7 @@ impl State {
     pub fn initialize_render(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
         write!(stdout, "{}", clear::All).unwrap();
-        write!(stdout, "{}", cursor::Hide);
+        write!(stdout, "{}", cursor::Hide).unwrap();
         self.draw_screen_box();
     }   
 
@@ -556,14 +556,14 @@ impl State {
     pub fn print_screen(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
         // Move this to some kind of global 
-        const padding: u16 = 2;
+        const PADDING: u16 = 2;
         for y in (0..16).map(|x| x * 2) {
             for x in 0..8 {
                 for i in 0..8 {
                     let top_square: bool = (self.screen[y as usize][x as usize] << i) & 0x80 == 0x80;
                     let bottom_square: bool = (self.screen[y + 1 as usize][x as usize] << i) & 0x80 == 0x80;
-                    let x_coord = (x * 8) + i + padding;
-                    let y_coord: u16 = (y / 2) as u16 + padding;
+                    let x_coord = (x * 8) + i + PADDING;
+                    let y_coord: u16 = (y / 2) as u16 + PADDING;
                     match (top_square, bottom_square) {
                         (true, true) => write!(stdout, "{}█", cursor::Goto(x_coord, y_coord)).unwrap(),
                         (true, false) => write!(stdout, "{}▀", cursor::Goto(x_coord, y_coord)).unwrap(),
@@ -581,7 +581,7 @@ impl State {
     fn print_registers(&mut self) {
         let mut stdout = stdout().into_raw_mode().unwrap();
         // Top row
-        for i in (1..17) {
+        for i in 1..17 {
             write!(stdout, "{}", cursor::Goto(67, i)).unwrap();
             println!("V{:x} - {:x}         ", i - 1, self.registers[(i - 1) as usize]);
         }

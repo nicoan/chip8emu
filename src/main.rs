@@ -8,7 +8,6 @@ use chip8::{MachineState};
 
 use termion::event::Key;
 use termion::input::TermRead;
-use termion::raw::IntoRawMode;
 use std::io::{stdin, stdout, Read, Write};
 
 

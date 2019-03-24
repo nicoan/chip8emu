@@ -10,6 +10,8 @@ use termion::raw::RawTerminal;
 
 // VF
 const FLAG_REGISTER: usize = 15;
+const BYTES_WIDTH: u8 = 8;
+const BYTES_HEIGHT: u8 = 32;
 
 const FONTSET: [u8; 80] =
 [
@@ -344,55 +346,11 @@ impl State {
             // as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen. If this causes any
             // pixels to be erased, VF is set to 1, otherwise it is set to 0. If the sprite is positioned so part of it is
             // outside the coordinates of the display, it wraps around to the opposite side of the screen.
-            /*(0xD, x, y, n) => {
-                let mut stdout = stdout().into_raw_mode().unwrap();
-                let v_x: u8 = self.registers[x as usize];
-                let v_y: u8 = self.registers[y as usize];
-                let screen_horizontal_index: u8 = (v_x / 8) % 8;
-                let reminder: u8 = v_x % 8;
-                self.registers[FLAG_REGISTER] = 0;
-                if (v_x < 0x3f && v_y < 0x1f) {
-                    for i in 0..n {
-                        let sprite_part = self.memory[(self.index + i as u16) as usize];
-                        // Prevent screen overflow
-                            if reminder != 0 {
-                                // Draw left part of the sprite
-                                let sprite_left = sprite_part >> reminder;
-                                write!(stdout, "{}", cursor::Goto(67, 1)).unwrap();
-                                println!("{} {} {} {} {}                    ", n, v_y, i, (v_y + i), screen_horizontal_index);
-                                let left_screen_part = self.screen[(v_y + i) as usize][screen_horizontal_index as usize];
-                                self.check_collision(left_screen_part, sprite_left);
-                                self.screen[(v_y + i) as usize][screen_horizontal_index as usize] ^= sprite_left;
-
-                                // Draw right part of the sprite
-                                if screen_horizontal_index < 7 {
-                                    let sprite_right = sprite_part << (8 - reminder);
-                                    let right_screen_part = self.screen[(v_y + i) as usize][(screen_horizontal_index + 1) as usize];
-                                    self.check_collision(right_screen_part, sprite_right);
-                                    self.screen[(v_y + i) as usize][(screen_horizontal_index + 1) as usize] ^= sprite_right;
-                                } else {
-                                    let sprite_right = sprite_part << (8 - reminder);
-                                    let right_screen_part = self.screen[(v_y + i) as usize][(reminder + 1) as usize];
-                                    self.check_collision(right_screen_part, sprite_right);
-                                    self.screen[(v_y + i) as usize][(reminder + 1) as usize] ^= sprite_right;
-                                }
-                            } else {
-                                write!(stdout, "{}", cursor::Goto(67, 1)).unwrap();
-                                println!("n: {} - v_y: {} - i: {} - sum: {} - shi: {}                    ", n, v_y, i, (v_y + i), screen_horizontal_index);
-                                let screen_part = self.screen[(v_y + i) as usize][screen_horizontal_index as usize];
-                                self.check_collision(screen_part, sprite_part);
-                                self.screen[(v_y + i) as usize][screen_horizontal_index as usize] ^= sprite_part;
-                            }
-                    }
-                }
-
-                Ok(MachineState::Draw)
-            }*/
-
             (0xD, x, y, n) => {
-                let v_x: u8 = (self.registers[x as usize] / 8) % 8;
-                let v_y: u8 = self.registers[y as usize];
-                let reminder: u8 = self.registers[x as usize] % 8;
+                // We use mod BYTES_(WIDTH|HEIGHT) to wrap around
+                let v_x: usize = ((self.registers[x as usize] / BYTES_WIDTH) % BYTES_WIDTH) as usize;
+                let initial_v_y: u8 = self.registers[y as usize];
+                let reminder: u8 = self.registers[x as usize] % BYTES_WIDTH;
 
                 // Reset flag regiter (collision check)
                 self.registers[FLAG_REGISTER] = 0;
@@ -402,20 +360,21 @@ impl State {
 
                     // Write left screen part
                     let sprite_left = sprite >> reminder;
-                    let left_screen_part = self.screen[(v_y + i) as usize][(v_x + 1) as usize];
+                    let v_y: usize = ((initial_v_y + i) % BYTES_HEIGHT) as usize;
+                    let left_screen_part = self.screen[v_y][v_x];
                     if (left_screen_part & sprite_left > 0) {
                         self.registers[FLAG_REGISTER] = 1
                     }
-                    self.screen[(v_y + i) as usize][v_x as usize] ^= sprite_left;
+                    self.screen[v_y][v_x] ^= sprite_left;
 
                     // Write right screen part
                     if (reminder != 0) {
                         let sprite_right = sprite << (8 - reminder);
-                        let right_screen_part = self.screen[(v_y + i) as usize][(v_x + 1) as usize];
+                        let right_screen_part = self.screen[v_y][v_x + 1];
                         if (right_screen_part & sprite_right > 0) {
                             self.registers[FLAG_REGISTER] = 1
                         }
-                        self.screen[(v_y + i) as usize][(v_x + 1) as usize] ^= sprite_right;
+                        self.screen[v_y][v_x + 1] ^= sprite_right;
                     }
                 }
 
@@ -440,9 +399,11 @@ impl State {
             // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position,
             // PC is increased by 2.
             (0xE, x, 0xA, 0x1) => {
-                if self.keypad >> self.registers[x as usize] & 0x1 == 1 {
+                // TODO No keyboard still - never skip
+                self.pc += 2;
+                /*if self.keypad >> self.registers[x as usize] & 0x1 != 1 {
                     self.pc += 2;
-                }
+                }*/
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -556,32 +517,6 @@ impl State {
          (opcode >> 8 & 0xF) as u8,
          (opcode >> 4 & 0xF) as u8,
          (opcode & 0xF) as u8)
-    }
-
-     fn check_collision(&mut self, screen_byte: u8, sprite_byte: u8, reminder: u8) {
-        if self.registers[FLAG_REGISTER] != 1 && screen_byte != 0 && sprite_byte != 0 {
-            let mut bit_to_check: u8 = 1;
-            for i in 0..reminder {
-                bit_to_check = bit_to_check << i;
-                if (screen_byte & bit_to_check) == 1 && (sprite_byte & bit_to_check) == 1 {
-                    self.registers[FLAG_REGISTER] = 1;
-                    break;
-                }
-            }
-        }
-    }
-
-    fn check_collision2(&mut self, screen_byte: u8, sprite_byte: u8) {
-        if self.registers[FLAG_REGISTER] != 1 {
-            let mut bit_to_check: u8 = 1;
-            for i in 0..8 {
-                bit_to_check = bit_to_check  << i;
-                if screen_byte & bit_to_check == 1 && sprite_byte & bit_to_check == 1 {
-                    self.registers[FLAG_REGISTER] = 1;
-                    break;
-                }
-            }
-        }
     }
 
     pub fn print_screen2(&mut self) {

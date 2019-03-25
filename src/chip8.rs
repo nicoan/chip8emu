@@ -33,7 +33,7 @@ const FONTSET: [u8; 80] =
 
 pub enum MachineState {
     SuccessfulExecution,
-    Draw,
+    Draw([[u8; 8]; 32]),
     WaitForKeyboard(u8),
 }
 
@@ -117,7 +117,7 @@ impl State {
     }
 
     fn execute_instruction(&mut self) -> Result<MachineState, String> {
-        self.print_registers();
+        //self.print_registers();
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
 
@@ -354,10 +354,10 @@ impl State {
 
                 for i in 0..n {
                     let sprite = self.memory[(self.index + i as u16) as usize];
+                    let v_y: usize = ((initial_v_y + i) % BYTES_HEIGHT) as usize;
 
                     // Write left screen part
                     let sprite_left = sprite >> reminder;
-                    let v_y: usize = ((initial_v_y + i) % BYTES_HEIGHT) as usize;
                     let left_screen_part = self.screen[v_y][v_x];
                     if left_screen_part & sprite_left > 0 {
                         self.registers[FLAG_REGISTER] = 1
@@ -376,7 +376,7 @@ impl State {
                     }
                 }
 
-                Ok(MachineState::Draw)
+                Ok(MachineState::Draw(self.screen))
             }
 
             // TODO in Exxx opcodes check the bit displacement (if its ok)
@@ -517,65 +517,6 @@ impl State {
          (opcode & 0xF) as u8)
     }
 
-    // This goes in renderer module
-    // remove _render from name
-    pub fn initialize_render(&mut self) {
-        let mut stdout = stdout().into_raw_mode().unwrap();
-        write!(stdout, "{}", clear::All).unwrap();
-        write!(stdout, "{}", cursor::Hide).unwrap();
-        self.draw_screen_box();
-    }   
-
-    fn draw_screen_box(&mut self) {
-        let mut stdout = stdout().into_raw_mode().unwrap();
-        write!(stdout, "{}", clear::All).unwrap();
-        // Top row
-        write!(stdout, "{}┌", cursor::Goto(1, 1)).unwrap();
-        for i in 2..66 {
-            write!(stdout, "{}─", cursor::Goto(i, 1)).unwrap();
-        }
-        write!(stdout, "{}┐", cursor::Goto(66, 1)).unwrap();
-
-        // Vertical rows
-        for i in 2..18 {
-            write!(stdout, "{}│", cursor::Goto(1, i)).unwrap();
-            write!(stdout, "{}│", cursor::Goto(66, i)).unwrap();
-        }
-
-        // Bottom row
-        write!(stdout, "{}└", cursor::Goto(1, 18)).unwrap();
-        for i in 2..66 {
-            write!(stdout, "{}─", cursor::Goto(i, 18)).unwrap();
-        }
-        write!(stdout, "{}┘", cursor::Goto(66, 18)).unwrap();
-    }
-
-
-
-    // This goes in renderer module
-    pub fn print_screen(&mut self) {
-        let mut stdout = stdout().into_raw_mode().unwrap();
-        // Move this to some kind of global 
-        const PADDING: u16 = 2;
-        for y in (0..16).map(|x| x * 2) {
-            for x in 0..8 {
-                for i in 0..8 {
-                    let top_square: bool = (self.screen[y as usize][x as usize] << i) & 0x80 == 0x80;
-                    let bottom_square: bool = (self.screen[y + 1 as usize][x as usize] << i) & 0x80 == 0x80;
-                    let x_coord = (x * 8) + i + PADDING;
-                    let y_coord: u16 = (y / 2) as u16 + PADDING;
-                    match (top_square, bottom_square) {
-                        (true, true) => write!(stdout, "{}█", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (true, false) => write!(stdout, "{}▀", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (false, true) => write!(stdout, "{}▄", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (false, false) => write!(stdout, "{} ", cursor::Goto(x_coord, y_coord)).unwrap()
-                    }
-                }
-            }
-        }
-        stdout.flush().unwrap();
-    }
-
     // DEBUGGING
 
     fn print_registers(&mut self) {
@@ -597,9 +538,6 @@ impl State {
         println!("OPCODE - {:x}", (self.memory[self.pc as usize] as u16) << 0x8 | (self.memory[(self.pc + 1) as usize] as u16));
         stdout.flush().unwrap();
     }
-
-
-
 }
 
 

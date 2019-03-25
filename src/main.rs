@@ -6,6 +6,12 @@ use std::env;
 mod chip8;
 use chip8::{MachineState};
 
+mod frontend;
+use frontend::Frontend;
+
+mod termion_frontend;
+use termion_frontend::TermionFrontend;
+
 use termion::event::Key;
 use termion::input::TermRead;
 use std::io::{stdin, stdout, Read, Write};
@@ -14,15 +20,26 @@ use std::io::{stdin, stdout, Read, Write};
 fn main() {
     let file = env::args().nth(1).expect("Missing argument");
 
+    // Initialize frontend
+    let mut frontend = TermionFrontend::new();
+
+    // Initialize chip8 state
     let mut vm = chip8::State::new(file).unwrap();
+
+    // Run game loop
+    run_loop(vm, frontend);
+
     thread::spawn(|| { keyboard_listener() });
-    vm.initialize_render();
+}
+
+fn run_loop<T>(mut vm: chip8::State, mut frontend: T) where T: Frontend  {
+    frontend.initialize();
     loop {
         //pause();
         match vm.execute_cycle() {
             Ok(MachineState::SuccessfulExecution) => continue,
             Ok(MachineState::WaitForKeyboard(k)) => keyboard_listener(),
-            Ok(MachineState::Draw) => vm.print_screen(),
+            Ok(MachineState::Draw(screen)) => frontend.draw(screen),
             Err(error) => {
                 println!("{}", error);
                 break;
@@ -30,8 +47,6 @@ fn main() {
         }
         thread::sleep(time::Duration::from_millis(1000 / 60))
     }
-
-    println!("Hello world!");
 }
 
 fn pause() {

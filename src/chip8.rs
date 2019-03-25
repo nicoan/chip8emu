@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Error;
 use rand::random;
-use termion::{cursor, clear};
+use termion::{cursor};
 use termion::raw::IntoRawMode;
 use std::io::{Write, stdout, stdin};
 

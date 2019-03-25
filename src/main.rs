@@ -7,10 +7,8 @@ mod chip8;
 use chip8::{MachineState};
 
 mod frontend;
-use frontend::Frontend;
-
-mod termion_frontend;
-use termion_frontend::TermionFrontend;
+use frontend::frontend::Frontend;
+use frontend::termion_frontend::TermionFrontend;
 
 use termion::event::Key;
 use termion::input::TermRead;

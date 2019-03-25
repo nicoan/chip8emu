@@ -1,5 +1,5 @@
 extern crate termion;
-use frontend::Frontend;
+use frontend::frontend::Frontend;
 use termion::{cursor, clear};
 use termion::raw::IntoRawMode;
 use std::io::{Read, Write, stdout, Stdout, Bytes};

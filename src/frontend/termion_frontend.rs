@@ -2,7 +2,9 @@ extern crate termion;
 use frontend::frontend::Frontend;
 use termion::{cursor, clear};
 use termion::raw::IntoRawMode;
-use std::io::{Read, Write, stdout, Stdout, Bytes};
+use termion::event::Key;
+use std::io::{Read, Write, stdout, stdin, Stdout, Bytes};
+use termion::input::TermRead;
 use termion::async_stdin;
 
 pub struct TermionFrontend {
@@ -93,11 +95,34 @@ impl Frontend for TermionFrontend {
                 _ => {},
             }
         }
-        write!(self.output_stream, "{}", cursor::Goto(67, 20)).unwrap();
-        println!("   ");
-        write!(self.output_stream, "{}", cursor::Goto(67, 20)).unwrap();
-        println!("{}", result);
-        self.output_stream.flush().unwrap();
         return result;
+    }
+
+    fn wait_for_key(&mut self) -> u8 {
+        let stdin = stdin();
+        println!("asdas");
+        for c in stdin.keys() {
+            println!("asdas");
+            match c.unwrap() {
+                Key::Char('1') => return 0,
+                Key::Char('2') => return 1,
+                Key::Char('3') => return 2,
+                Key::Char('4') => return 3,
+                Key::Char('q') => return 4,
+                Key::Char('w') => return 5,
+                Key::Char('e') => return 6,
+                Key::Char('r') => return 7,
+                Key::Char('a') => return 8,
+                Key::Char('s') => return 9,
+                Key::Char('d') => return 10,
+                Key::Char('f') => return 11,
+                Key::Char('z') => return 12,
+                Key::Char('x') => return 13,
+                Key::Char('v') => return 14,
+                Key::Char('c') => return 15,
+                _ => return self.wait_for_key()
+            }
+        }
+        return 0x0;
     }
 }

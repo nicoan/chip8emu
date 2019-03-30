@@ -34,7 +34,7 @@ const FONTSET: [u8; 80] =
 pub enum MachineState {
     SuccessfulExecution,
     Draw([[u8; 8]; 32]),
-    WaitForKeyboard(u8),
+    WaitForKeyboard,
 }
 
 // Represnts CHIP-8 current state
@@ -62,6 +62,9 @@ pub struct State {
 
     // Keypad
     keypad: u16,
+
+    // Register where we are saving pressed key after WaitForKeyboard MachineSate
+    register_pressed_key: u8,
 
     // Timers
     delay_timer: u8,
@@ -95,6 +98,7 @@ impl State {
             stack: [0x0; 16],
             screen: [[0x0; 8]; 32],
             keypad: 0x0,
+            register_pressed_key: 0x0,
             delay_timer: 0x0,
             sound_timer: 0x0,
         })
@@ -117,7 +121,7 @@ impl State {
     }
 
     fn execute_instruction(&mut self) -> Result<MachineState, String> {
-        //self.print_registers();
+        self.print_registers();
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
 
@@ -414,12 +418,12 @@ impl State {
             // Wait for a key press, store the value of the key in Vx.
             // All execution stops until a key is pressed, then the value of that key is stored in Vx.
             (0xF, x, 0x0, 0xA) => {
-                let stdin = stdin();
+                /*let stdin = stdin();
                 let iterator = stdin.lock();
                 self.pc -= 2;
-                Ok(MachineState::SuccessfulExecution)
-
-                //Ok(MachineState::WaitForKeyboard(self.registers[x as usize]))
+                Ok(MachineState::SuccessfulExecution)*/
+                self.register_pressed_key = x;
+                Ok(MachineState::WaitForKeyboard)
             }
 
             // Fx15 - LD DT, Vx
@@ -499,7 +503,7 @@ impl State {
 
     pub fn wait_key_press(&mut self, key: u8) {
         println!("pressed {}", key);
-        //thread::sleep(time::Duration::from_millis(1000));
+        self.registers[self.register_pressed_key as usize] = key;
     }
 
     pub fn set_keys_pressed(&mut self, keys: u16) {

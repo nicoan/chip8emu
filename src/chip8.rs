@@ -248,7 +248,6 @@ impl State {
             // The values of Vx and Vy are added together. If the result is greater than 8 bits (i.e., > 255,) VF is set to 1,
             // otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
             (0x8, x, y, 0x4) => {
-                // TODO: Check the into, not sure how it works
                 let result: u16 = self.registers[x as usize] as u16 + self.registers[y as usize] as u16;
                 self.registers[x as usize] = (result % 256) as u8;
                 self.registers[FLAG_REGISTER] = if result > 255 { 1 } else { 0 };
@@ -386,7 +385,7 @@ impl State {
             // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position,
             // PC is increased by 2.
             (0xE, x, 0x9, 0xE) => {
-                if self.keypad >> self.registers[x as usize] & 0x1 == 1 {
+                if (self.keypad >> self.registers[x as usize]) & 0x1 == 1 {
                     self.pc += 2;
                 }
                 Ok(MachineState::SuccessfulExecution)
@@ -397,11 +396,9 @@ impl State {
             // Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position,
             // PC is increased by 2.
             (0xE, x, 0xA, 0x1) => {
-                // TODO No keyboard still - never skip
-                self.pc += 2;
-                /*if self.keypad >> self.registers[x as usize] & 0x1 != 1 {
+                if (self.keypad >> self.registers[x as usize]) & 0x1 != 1 {
                     self.pc += 2;
-                }*/
+                }
                 Ok(MachineState::SuccessfulExecution)
             }
 
@@ -503,6 +500,10 @@ impl State {
     pub fn wait_key_press(&mut self, key: u8) {
         println!("pressed {}", key);
         //thread::sleep(time::Duration::from_millis(1000));
+    }
+
+    pub fn set_keys_pressed(&mut self, keys: u16) {
+        self.keypad = keys;
     }
 
     fn get_opcode(&mut self) -> Result<u16, String> {

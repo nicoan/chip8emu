@@ -68,4 +68,36 @@ impl Frontend for TermionFrontend {
         }
         self.output_stream.flush().unwrap();
     }
+
+    fn check_pressed_keys(&mut self) -> u16 {
+        let mut result: u16 = 0x0;
+        loop {
+            match self.input_stream.next() {
+                Some(Ok(b'1')) => { result |= 0x1 },
+                Some(Ok(b'2')) => { result |= 0x2; },
+                Some(Ok(b'3')) => { result |= 0x4; },
+                Some(Ok(b'4')) => { result |= 0x8; },
+                Some(Ok(b'q')) => { result |= 0x10; },
+                Some(Ok(b'w')) => { result |= 0x20; },
+                Some(Ok(b'e')) => { result |= 0x40; },
+                Some(Ok(b'r')) => { result |= 0x80; },
+                Some(Ok(b'a')) => { result |= 0x100; },
+                Some(Ok(b's')) => { result |= 0x200; },
+                Some(Ok(b'd')) => { result |= 0x400; },
+                Some(Ok(b'f')) => { result |= 0x800; },
+                Some(Ok(b'z')) => { result |= 0x1000; },
+                Some(Ok(b'x')) => { result |= 0x2000; },
+                Some(Ok(b'v')) => { result |= 0x4000; },
+                Some(Ok(b'c')) => { result |= 0x8000; },
+                None => break,
+                _ => {},
+            }
+        }
+        write!(self.output_stream, "{}", cursor::Goto(67, 20)).unwrap();
+        println!("   ");
+        write!(self.output_stream, "{}", cursor::Goto(67, 20)).unwrap();
+        println!("{}", result);
+        self.output_stream.flush().unwrap();
+        return result;
+    }
 }

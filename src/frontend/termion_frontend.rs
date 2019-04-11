@@ -6,8 +6,95 @@ use std::io::{Write, stdout, Stdout};
 use std::{thread};
 use linux_raw_input_rs::{InputReader, get_input_devices};
 use linux_raw_input_rs::keys::Keys;
-use linux_raw_input_rs::input::EventType;
+use linux_raw_input_rs::input::{Input, EventType};
 use std::sync::{Arc, Mutex};
+
+fn set_keyboard_state(input: Input, keyboard_state: u16) -> u16 {
+    let mut kb_state = keyboard_state;
+    match input.event_type() {
+        EventType::Push => {
+            match input.get_key() {
+                Keys::KEY_1 => { kb_state |= 0x1 },
+                Keys::KEY_2 => { kb_state |= 0x2; },
+                Keys::KEY_3 => { kb_state |= 0x4; },
+                Keys::KEY_4 => { kb_state |= 0x8; },
+                Keys::KEY_Q => { kb_state |= 0x10; },
+                Keys::KEY_W => { kb_state |= 0x20; },
+                Keys::KEY_E => { kb_state |= 0x40; },
+                Keys::KEY_R => { kb_state |= 0x80; },
+                Keys::KEY_A => { kb_state |= 0x100; },
+                Keys::KEY_S => { kb_state |= 0x200; },
+                Keys::KEY_D => { kb_state |= 0x400; },
+                Keys::KEY_F => { kb_state |= 0x800; },
+                Keys::KEY_Z => { kb_state |= 0x1000; },
+                Keys::KEY_X => { kb_state |= 0x2000; },
+                Keys::KEY_V => { kb_state |= 0x4000; },
+                Keys::KEY_C => { kb_state |= 0x8000; },
+                _ => {},
+            }
+        },
+        EventType::Release => {
+            match input.get_key() {
+                Keys::KEY_1 => { kb_state &= !0x1 },
+                Keys::KEY_2 => { kb_state &= !0x2; },
+                Keys::KEY_3 => { kb_state &= !0x4; },
+                Keys::KEY_4 => { kb_state &= !0x8; },
+                Keys::KEY_Q => { kb_state &= !0x10; },
+                Keys::KEY_W => { kb_state &= !0x20; },
+                Keys::KEY_E => { kb_state &= !0x40; },
+                Keys::KEY_R => { kb_state &= !0x80; },
+                Keys::KEY_A => { kb_state &= !0x100; },
+                Keys::KEY_S => { kb_state &= !0x200; },
+                Keys::KEY_D => { kb_state &= !0x400; },
+                Keys::KEY_F => { kb_state &= !0x800; },
+                Keys::KEY_Z => { kb_state &= !0x1000; },
+                Keys::KEY_X => { kb_state &= !0x2000; },
+                Keys::KEY_V => { kb_state &= !0x4000; },
+                Keys::KEY_C => { kb_state &= !0x8000; },
+                _ => {},
+            }
+        },
+        _ => {}
+    }
+    return kb_state;
+}
+
+fn check_pressed_keys(keyboard_state: Arc<Mutex<u16>>) {
+    let device_path: String = get_input_devices()
+        .iter()
+        .nth(0)
+        .expect("There was an error initializing the keyboard.")
+        .to_string();
+    let mut input_stream = InputReader::new(device_path);
+
+    loop {
+        let input = input_stream.current_state();
+        let mut kb_state = keyboard_state.lock().unwrap();
+        if input.is_key_event() {
+            *kb_state = set_keyboard_state(input, *kb_state);
+        }
+        drop(kb_state);
+    }
+}
+
+fn wait_for_key() -> u16 {
+    let device_path: String = get_input_devices()
+        .iter()
+        .nth(0)
+        .expect("There was an error initializing the keyboard.")
+        .to_string();
+    let mut input_stream = InputReader::new(device_path);
+
+
+    let keyboard_state;
+    loop {
+        let input = input_stream.current_state();
+        if input.is_key_event() {
+            keyboard_state = set_keyboard_state(input, 0x0);
+            return keyboard_state;
+        }
+    }
+}
 
 pub struct TermionFrontend {
     output_stream: termion::raw::RawTerminal<Stdout>,
@@ -20,63 +107,6 @@ impl TermionFrontend {
             output_stream: stdout().into_raw_mode().unwrap(),
             keyboard_state: Arc::new(Mutex::new(0x0)),
         }
-    }
-}
-
-fn check_pressed_keys(keyboard_state: Arc<Mutex<u16>>) {
-    let device_path : String = get_input_devices().iter().nth(0).expect("Problem with iterator").to_string();
-    let mut input_stream = InputReader::new(device_path);
-    loop {
-        let input = input_stream.current_state();
-        let mut kb_state = keyboard_state.lock().unwrap();
-        if input.is_key_event(){
-            match input.event_type() {
-                EventType::Push => {
-                    match input.get_key() {
-                        Keys::KEY_1 => { *kb_state |= 0x1 },
-                        Keys::KEY_2 => { *kb_state |= 0x2; },
-                        Keys::KEY_3 => { *kb_state |= 0x4; },
-                        Keys::KEY_4 => { *kb_state |= 0x8; },
-                        Keys::KEY_Q => { *kb_state |= 0x10; },
-                        Keys::KEY_W => { *kb_state |= 0x20; },
-                        Keys::KEY_E => { *kb_state |= 0x40; },
-                        Keys::KEY_R => { *kb_state |= 0x80; },
-                        Keys::KEY_A => { *kb_state |= 0x100; },
-                        Keys::KEY_S => { *kb_state |= 0x200; },
-                        Keys::KEY_D => { *kb_state |= 0x400; },
-                        Keys::KEY_F => { *kb_state |= 0x800; },
-                        Keys::KEY_Z => { *kb_state |= 0x1000; },
-                        Keys::KEY_X => { *kb_state |= 0x2000; },
-                        Keys::KEY_V => { *kb_state |= 0x4000; },
-                        Keys::KEY_C => { *kb_state |= 0x8000; },
-                        _ => {},
-                    }
-                },
-                EventType::Release => {
-                    match input.get_key() {
-                        Keys::KEY_1 => { *kb_state &= !0x1 },
-                        Keys::KEY_2 => { *kb_state &= !0x2; },
-                        Keys::KEY_3 => { *kb_state &= !0x4; },
-                        Keys::KEY_4 => { *kb_state &= !0x8; },
-                        Keys::KEY_Q => { *kb_state &= !0x10; },
-                        Keys::KEY_W => { *kb_state &= !0x20; },
-                        Keys::KEY_E => { *kb_state &= !0x40; },
-                        Keys::KEY_R => { *kb_state &= !0x80; },
-                        Keys::KEY_A => { *kb_state &= !0x100; },
-                        Keys::KEY_S => { *kb_state &= !0x200; },
-                        Keys::KEY_D => { *kb_state &= !0x400; },
-                        Keys::KEY_F => { *kb_state &= !0x800; },
-                        Keys::KEY_Z => { *kb_state &= !0x1000; },
-                        Keys::KEY_X => { *kb_state &= !0x2000; },
-                        Keys::KEY_V => { *kb_state &= !0x4000; },
-                        Keys::KEY_C => { *kb_state &= !0x8000; },
-                        _ => {},
-                    }
-                },
-                _ => {}
-            }
-        }
-        drop(kb_state);
     }
 }
 
@@ -134,31 +164,27 @@ impl Frontend for TermionFrontend {
     }
 
     fn wait_for_key(&mut self) -> u8 {
-        /*let stdin = stdin();
-        println!("asdas");
-        for c in stdin.keys() {
-            println!("asdas");
-            match c.unwrap() {
-                Key::Char('1') => return 0,
-                Key::Char('2') => return 1,
-                Key::Char('3') => return 2,
-                Key::Char('4') => return 3,
-                Key::Char('q') => return 4,
-                Key::Char('w') => return 5,
-                Key::Char('e') => return 6,
-                Key::Char('r') => return 7,
-                Key::Char('a') => return 8,
-                Key::Char('s') => return 9,
-                Key::Char('d') => return 10,
-                Key::Char('f') => return 11,
-                Key::Char('z') => return 12,
-                Key::Char('x') => return 13,
-                Key::Char('v') => return 14,
-                Key::Char('c') => return 15,
-                _ => return self.wait_for_key()
-            }
-        }*/
-        return 0x0;
+        let wait = thread::spawn(move || { wait_for_key() });
+        let result: u16 = wait.join().unwrap();
+        match result {
+            0x1 => return 1,
+            0x2 => return 2,
+            0x4 => return 3,
+            0x8 => return 4,
+            0x10 => return 5,
+            0x20 => return 6,
+            0x40 => return 7,
+            0x80 => return 8,
+            0x100 => return 9,
+            0x200 => return 10,
+            0x400 => return 11,
+            0x800 => return 12,
+            0x1000 => return 13,
+            0x2000 => return 14,
+            0x4000 => return 15,
+            0x8000 => return 16,
+            _ => return 0,
+        }
     }
 
     fn get_keyboard_state(&mut self) -> u16 {

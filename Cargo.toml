@@ -6,3 +6,4 @@ authors = ["Nicolas Antinori <nicolas_antinori@hotmail.com>"]
 [dependencies]
 rand = "0.4.6"
 termion = "1.5.1"
+linux_raw_input_rs = "0.1.6"

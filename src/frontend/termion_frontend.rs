@@ -2,22 +2,81 @@ extern crate termion;
 use frontend::frontend::Frontend;
 use termion::{cursor, clear};
 use termion::raw::IntoRawMode;
-use termion::event::Key;
-use std::io::{Read, Write, stdout, stdin, Stdout, Bytes};
-use termion::input::TermRead;
-use termion::async_stdin;
+use std::io::{Write, stdout, Stdout};
+use std::{thread};
+use linux_raw_input_rs::{InputReader, get_input_devices};
+use linux_raw_input_rs::keys::Keys;
+use linux_raw_input_rs::input::EventType;
+use std::sync::{Arc, Mutex};
 
 pub struct TermionFrontend {
     output_stream: termion::raw::RawTerminal<Stdout>,
-    input_stream: Bytes<termion::AsyncReader>,
+    keyboard_state: Arc<Mutex<u16>>,
 }
 
 impl TermionFrontend {
     pub fn new() -> Self {
         TermionFrontend {
             output_stream: stdout().into_raw_mode().unwrap(),
-            input_stream: async_stdin().bytes()
+            keyboard_state: Arc::new(Mutex::new(0x0)),
         }
+    }
+}
+
+fn check_pressed_keys(keyboard_state: Arc<Mutex<u16>>) {
+    let device_path : String = get_input_devices().iter().nth(0).expect("Problem with iterator").to_string();
+    let mut input_stream = InputReader::new(device_path);
+    loop {
+        let input = input_stream.current_state();
+        let mut kb_state = keyboard_state.lock().unwrap();
+        if input.is_key_event(){
+            match input.event_type() {
+                EventType::Push => {
+                    match input.get_key() {
+                        Keys::KEY_1 => { *kb_state |= 0x1 },
+                        Keys::KEY_2 => { *kb_state |= 0x2; },
+                        Keys::KEY_3 => { *kb_state |= 0x4; },
+                        Keys::KEY_4 => { *kb_state |= 0x8; },
+                        Keys::KEY_Q => { *kb_state |= 0x10; },
+                        Keys::KEY_W => { *kb_state |= 0x20; },
+                        Keys::KEY_E => { *kb_state |= 0x40; },
+                        Keys::KEY_R => { *kb_state |= 0x80; },
+                        Keys::KEY_A => { *kb_state |= 0x100; },
+                        Keys::KEY_S => { *kb_state |= 0x200; },
+                        Keys::KEY_D => { *kb_state |= 0x400; },
+                        Keys::KEY_F => { *kb_state |= 0x800; },
+                        Keys::KEY_Z => { *kb_state |= 0x1000; },
+                        Keys::KEY_X => { *kb_state |= 0x2000; },
+                        Keys::KEY_V => { *kb_state |= 0x4000; },
+                        Keys::KEY_C => { *kb_state |= 0x8000; },
+                        _ => {},
+                    }
+                },
+                EventType::Release => {
+                    match input.get_key() {
+                        Keys::KEY_1 => { *kb_state &= !0x1 },
+                        Keys::KEY_2 => { *kb_state &= !0x2; },
+                        Keys::KEY_3 => { *kb_state &= !0x4; },
+                        Keys::KEY_4 => { *kb_state &= !0x8; },
+                        Keys::KEY_Q => { *kb_state &= !0x10; },
+                        Keys::KEY_W => { *kb_state &= !0x20; },
+                        Keys::KEY_E => { *kb_state &= !0x40; },
+                        Keys::KEY_R => { *kb_state &= !0x80; },
+                        Keys::KEY_A => { *kb_state &= !0x100; },
+                        Keys::KEY_S => { *kb_state &= !0x200; },
+                        Keys::KEY_D => { *kb_state &= !0x400; },
+                        Keys::KEY_F => { *kb_state &= !0x800; },
+                        Keys::KEY_Z => { *kb_state &= !0x1000; },
+                        Keys::KEY_X => { *kb_state &= !0x2000; },
+                        Keys::KEY_V => { *kb_state &= !0x4000; },
+                        Keys::KEY_C => { *kb_state &= !0x8000; },
+                        _ => {},
+                    }
+                },
+                _ => {}
+            }
+        }
+        drop(kb_state);
     }
 }
 
@@ -48,6 +107,9 @@ impl Frontend for TermionFrontend {
             write!(self.output_stream, "{}─", cursor::Goto(i, 18)).unwrap();
         }
         write!(self.output_stream, "{}┘", cursor::Goto(66, 18)).unwrap();
+
+        let kb_state = self.keyboard_state.clone();
+        thread::spawn(move || { check_pressed_keys(kb_state) });
     }
 
     fn draw(&mut self, screen: [[u8; 8]; 32]) {
@@ -71,35 +133,8 @@ impl Frontend for TermionFrontend {
         self.output_stream.flush().unwrap();
     }
 
-    fn check_pressed_keys(&mut self) -> u16 {
-        let mut result: u16 = 0x0;
-        loop {
-            match self.input_stream.next() {
-                Some(Ok(b'1')) => { result |= 0x1 },
-                Some(Ok(b'2')) => { result |= 0x2; },
-                Some(Ok(b'3')) => { result |= 0x4; },
-                Some(Ok(b'4')) => { result |= 0x8; },
-                Some(Ok(b'q')) => { result |= 0x10; },
-                Some(Ok(b'w')) => { result |= 0x20; },
-                Some(Ok(b'e')) => { result |= 0x40; },
-                Some(Ok(b'r')) => { result |= 0x80; },
-                Some(Ok(b'a')) => { result |= 0x100; },
-                Some(Ok(b's')) => { result |= 0x200; },
-                Some(Ok(b'd')) => { result |= 0x400; },
-                Some(Ok(b'f')) => { result |= 0x800; },
-                Some(Ok(b'z')) => { result |= 0x1000; },
-                Some(Ok(b'x')) => { result |= 0x2000; },
-                Some(Ok(b'v')) => { result |= 0x4000; },
-                Some(Ok(b'c')) => { result |= 0x8000; },
-                None => break,
-                _ => {},
-            }
-        }
-        return result;
-    }
-
     fn wait_for_key(&mut self) -> u8 {
-        let stdin = stdin();
+        /*let stdin = stdin();
         println!("asdas");
         for c in stdin.keys() {
             println!("asdas");
@@ -122,7 +157,13 @@ impl Frontend for TermionFrontend {
                 Key::Char('c') => return 15,
                 _ => return self.wait_for_key()
             }
-        }
+        }*/
         return 0x0;
+    }
+
+    fn get_keyboard_state(&mut self) -> u16 {
+        let keyboard_state = self.keyboard_state.lock().unwrap();
+        drop(*keyboard_state);
+        return *keyboard_state;
     }
 }

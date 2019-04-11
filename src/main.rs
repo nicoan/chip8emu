@@ -1,7 +1,9 @@
 extern crate rand;
 extern crate termion;
+extern crate linux_raw_input_rs;
 use std::{thread, time};
 use std::env;
+//use std::io::{Read, Write, stdout, stdin};
 
 mod chip8;
 use chip8::{MachineState};
@@ -15,10 +17,10 @@ fn main() {
     let file = env::args().nth(1).expect("Missing argument");
 
     // Initialize frontend
-    let mut frontend = TermionFrontend::new();
+    let frontend = TermionFrontend::new();
 
     // Initialize chip8 state
-    let mut vm = chip8::State::new(file).unwrap();
+    let vm = chip8::State::new(file).unwrap();
 
     // Run game loop
     run_loop(vm, frontend);
@@ -27,7 +29,7 @@ fn main() {
 fn run_loop<T>(mut vm: chip8::State, mut frontend: T) where T: Frontend  {
     frontend.initialize();
     loop {
-        //pause();
+        vm.set_keys_pressed(frontend.get_keyboard_state());
         match vm.execute_cycle() {
             Ok(MachineState::SuccessfulExecution) => continue,
             Ok(MachineState::WaitForKeyboard) => { vm.wait_key_press(frontend.wait_for_key()) },
@@ -38,7 +40,6 @@ fn run_loop<T>(mut vm: chip8::State, mut frontend: T) where T: Frontend  {
             }
         }
         thread::sleep(time::Duration::from_millis(1000 / 60));
-        vm.set_keys_pressed(frontend.check_pressed_keys());
     }
 }
 

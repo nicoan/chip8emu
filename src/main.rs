@@ -3,7 +3,6 @@ extern crate termion;
 extern crate linux_raw_input_rs;
 use std::{thread, time};
 use std::env;
-//use std::io::{Read, Write, stdout, stdin};
 
 mod chip8;
 use chip8::{MachineState};
@@ -11,7 +10,6 @@ use chip8::{MachineState};
 mod frontend;
 use frontend::frontend::Frontend;
 use frontend::termion_frontend::TermionFrontend;
-
 
 fn main() {
     let file = env::args().nth(1).expect("Missing argument");
@@ -42,9 +40,3 @@ fn run_loop<T>(mut vm: chip8::State, mut frontend: T) where T: Frontend  {
         thread::sleep(time::Duration::from_millis(1000 / 60));
     }
 }
-
-/*fn pause() {
-    let mut stdout = stdout();
-    stdout.flush().unwrap();
-    stdin().read(&mut [0]).unwrap();
-}*/

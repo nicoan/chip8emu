@@ -121,7 +121,7 @@ impl State {
     }
 
     fn execute_instruction(&mut self) -> Result<MachineState, String> {
-        self.print_registers();
+        //self.print_registers();
         let opcode: u16 = try!(self.get_opcode());
         self.pc += 2;
 

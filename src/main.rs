@@ -8,7 +8,7 @@ mod chip8;
 use chip8::{MachineState};
 
 mod frontend;
-use frontend::frontend::Frontend;
+use frontend::frontend::{Frontend, KeyboardCommand};
 use frontend::termion_frontend::TermionFrontend;
 
 fn main() {
@@ -27,7 +27,11 @@ fn main() {
 fn run_loop<T>(mut vm: chip8::State, mut frontend: T) where T: Frontend  {
     frontend.initialize();
     loop {
-        vm.set_keys_pressed(frontend.get_keyboard_state());
+        match frontend.get_keyboard_state() {
+            KeyboardCommand::KeypadState(state) => vm.set_keys_pressed(state),
+            KeyboardCommand::Quit => break,
+        }
+        
         match vm.execute_cycle() {
             Ok(MachineState::SuccessfulExecution) => continue,
             Ok(MachineState::WaitForKeyboard) => { vm.wait_key_press(frontend.wait_for_key()) },

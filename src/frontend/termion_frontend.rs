@@ -1,7 +1,8 @@
 extern crate termion;
-use frontend::frontend::Frontend;
+use frontend::frontend::{Frontend, KeyboardCommand};
 use termion::{cursor, clear};
 use termion::raw::IntoRawMode;
+use termion::input::TermRead;
 use std::io::{Write, stdout, Stdout};
 use std::{thread};
 use linux_raw_input_rs::{InputReader, get_input_devices};
@@ -9,7 +10,7 @@ use linux_raw_input_rs::keys::Keys;
 use linux_raw_input_rs::input::{Input, EventType};
 use std::sync::{Arc, Mutex};
 
-fn set_keyboard_state(input: Input, keyboard_state: u16) -> u16 {
+fn set_keyboard_state(input: Input, keyboard_state: u32) -> u32 {
     let mut kb_state = keyboard_state;
     match input.event_type() {
         EventType::Push => {
@@ -30,6 +31,7 @@ fn set_keyboard_state(input: Input, keyboard_state: u16) -> u16 {
                 Keys::KEY_X => { kb_state |= 0x2000; },
                 Keys::KEY_V => { kb_state |= 0x4000; },
                 Keys::KEY_C => { kb_state |= 0x8000; },
+                Keys::KEY_O => { return 0x10000; },
                 _ => {},
             }
         },
@@ -59,7 +61,7 @@ fn set_keyboard_state(input: Input, keyboard_state: u16) -> u16 {
     return kb_state;
 }
 
-fn check_pressed_keys(keyboard_state: Arc<Mutex<u16>>) {
+fn check_pressed_keys(keyboard_state: Arc<Mutex<u32>>) {
     let device_path: String = get_input_devices()
         .iter()
         .nth(0)
@@ -77,14 +79,13 @@ fn check_pressed_keys(keyboard_state: Arc<Mutex<u16>>) {
     }
 }
 
-fn wait_for_key() -> u16 {
+fn wait_for_key() -> u32 {
     let device_path: String = get_input_devices()
         .iter()
         .nth(0)
         .expect("There was an error initializing the keyboard.")
         .to_string();
     let mut input_stream = InputReader::new(device_path);
-
 
     let keyboard_state;
     loop {
@@ -98,7 +99,7 @@ fn wait_for_key() -> u16 {
 
 pub struct TermionFrontend {
     output_stream: termion::raw::RawTerminal<Stdout>,
-    keyboard_state: Arc<Mutex<u16>>,
+    keyboard_state: Arc<Mutex<u32>>,
 }
 
 impl TermionFrontend {
@@ -165,7 +166,7 @@ impl Frontend for TermionFrontend {
 
     fn wait_for_key(&mut self) -> u8 {
         let wait = thread::spawn(move || { wait_for_key() });
-        let result: u16 = wait.join().unwrap();
+        let result: u32 = wait.join().unwrap();
         match result {
             0x1 => return 1,
             0x2 => return 2,
@@ -187,9 +188,17 @@ impl Frontend for TermionFrontend {
         }
     }
 
-    fn get_keyboard_state(&mut self) -> u16 {
+    fn get_keyboard_state(&mut self) -> KeyboardCommand {
         let keyboard_state = self.keyboard_state.lock().unwrap();
         drop(*keyboard_state);
-        return *keyboard_state;
+
+        if *keyboard_state < 0x10000 {
+            return KeyboardCommand::KeypadState(*keyboard_state as u16);
+        } else if *keyboard_state == 0x10000 {
+            return KeyboardCommand::Quit;
+        } else {
+            return KeyboardCommand::KeypadState(0x0);
+        }
     }
+
 }

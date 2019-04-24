@@ -502,7 +502,6 @@ impl State {
     }
 
     pub fn wait_key_press(&mut self, key: u8) {
-        println!("pressed {}", key);
         self.registers[self.register_pressed_key as usize] = key;
     }
 

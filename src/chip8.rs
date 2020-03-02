@@ -2,9 +2,6 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Error;
 use rand::random;
-use termion::{cursor};
-use termion::raw::IntoRawMode;
-use std::io::{Write, stdout};
 
 // VF
 const FLAG_REGISTER: usize = 15;
@@ -418,10 +415,6 @@ impl State {
             // Wait for a key press, store the value of the key in Vx.
             // All execution stops until a key is pressed, then the value of that key is stored in Vx.
             (0xF, x, 0x0, 0xA) => {
-                /*let stdin = stdin();
-                let iterator = stdin.lock();
-                self.pc -= 2;
-                Ok(MachineState::SuccessfulExecution)*/
                 self.register_pressed_key = x;
                 Ok(MachineState::WaitForKeyboard)
             }
@@ -519,28 +512,6 @@ impl State {
          (opcode >> 8 & 0xF) as u8,
          (opcode >> 4 & 0xF) as u8,
          (opcode & 0xF) as u8)
-    }
-
-    // DEBUGGING
-
-    fn print_registers(&mut self) {
-        let mut stdout = stdout().into_raw_mode().unwrap();
-        // Top row
-        for i in 1..17 {
-            write!(stdout, "{}", cursor::Goto(67, i)).unwrap();
-            println!("V{:x} - {:x}         ", i - 1, self.registers[(i - 1) as usize]);
-        }
-
-        write!(stdout, "{}", cursor::Goto(67, 19)).unwrap();
-        println!("I - {:x}         ", self.index);
-
-        write!(stdout, "{}", cursor::Goto(67, 20)).unwrap();
-        println!("PC - {:x}         ", self.pc);
-        write!(stdout, "{}", cursor::Goto(67, 21)).unwrap();
-        println!("SP - {:x}         ", self.sp);
-        write!(stdout, "{}", cursor::Goto(67, 22)).unwrap();
-        println!("OPCODE - {:x}", (self.memory[self.pc as usize] as u16) << 0x8 | (self.memory[(self.pc + 1) as usize] as u16));
-        stdout.flush().unwrap();
     }
 }
 

@@ -7,3 +7,9 @@ authors = ["Nicolas Antinori <nicolas_antinori@hotmail.com>"]
 rand = "0.4.6"
 termion = "1.5.1"
 linux_raw_input_rs = "0.1.6"
+clap = "2.33.0"
+
+[dependencies.sdl2]
+version = "0.30"
+default-features = false
+features = ["gfx"]

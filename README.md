@@ -1,13 +1,13 @@
-# Chip 8 Emulator written in rust
+# Chip 8 Emulator
 
 ![Preview](https://raw.githubusercontent.com/nicoan/chip8emu/master/preview.gif)
 
-The objective of this project is to get some understanding in how emulators work and an use it as an oportunity to learn and play with Rust lang 
+The objective of this project is to get some understanding in how emulators work and use it as an opportunity to learn and play a little with Rust lang. 
 
 ## Build
 
 ### Dependencies
-You will need to install `libsdl2-gfx-dev` (debian based systems).
+- `libsdl2-gfx-dev`
 
 ### Building
 Debug: `cargo build`
@@ -17,7 +17,7 @@ Release: `cargo build --release`
 ## Run
 
 ```
-./target/debug/chip8emu [OPTIONS] --game <FILE>
+cargo run -- [OPTIONS] --game <FILE> 
 ```
 
 #### Options
@@ -45,5 +45,9 @@ The emulator has the following keymappings
    +-+-+-+-+                  +-+-+-+-+
 ```
 
+To exit emulator, press 'o' key.
 
-
+## Resources
+- [Cowgod's Chip-8 Technical Reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM)
+- [How to write an emulator (CHIP-8 interpreter](http://www.multigesture.net/articles/how-to-write-an-emulator-chip-8-interpreter/)
+- [Mastering Chip-8](http://mattmik.com/files/chip8/mastering/chip8.html)

@@ -79,9 +79,9 @@ impl State {
 
         // Read CHIP-8 File
         // Allocate the rom in memory
-        let mut file = try!(File::open(filename));
+        let mut file = File::open(filename)?;
         let mut buffer = Vec::new();
-        try!(file.read_to_end(&mut buffer));
+        file.read_to_end(&mut buffer)?;
         for i in 0..buffer.len() {
             memory[0x200 + i] = buffer[i];
         }
@@ -119,7 +119,7 @@ impl State {
 
     fn execute_instruction(&mut self) -> Result<MachineState, String> {
         //self.print_registers();
-        let opcode: u16 = try!(self.get_opcode());
+        let opcode: u16 = self.get_opcode()?;
         self.pc += 2;
 
         match self.break_opcode(opcode) {

@@ -66,26 +66,24 @@ fn main() {
     run_loop(vm, renderer);
 }
 
-fn run_loop(mut vm: chip8::State, renderer: Renderer) {
-    let mut graphics = renderer.graphics;
-    let mut input = renderer.input;
-    graphics.initialize();
-    input.initialize();
+fn run_loop(mut vm: chip8::State, mut renderer: Renderer) {
+    renderer.input.initialize();
+    renderer.graphics.initialize();
 
-    'running: loop {
-        match input.get_keyboard_state() {
+    loop {
+        match renderer.input.get_keyboard_state() {
             KeyboardCommand::KeypadState(state) => { vm.set_keys_pressed(state) },
             KeyboardCommand::SingleKey(key) => { vm.wait_key_press(key) },
-            KeyboardCommand::Quit => break 'running,
+            KeyboardCommand::Quit => break,
         }
-        
+
         match vm.execute_cycle() {
             Ok(MachineState::SuccessfulExecution) => continue,
-            Ok(MachineState::WaitForKeyboard) => input.set_waiting_key(),
-            Ok(MachineState::Draw(screen)) => graphics.draw(screen),
+            Ok(MachineState::WaitForKeyboard) => renderer.input.set_waiting_key(),
+            Ok(MachineState::Draw(screen)) => renderer.graphics.draw(screen),
             Err(error) => {
                 println!("{}", error);
-                break 'running;
+                break;
             }
         }
         thread::sleep(time::Duration::from_millis(1000 / 30));

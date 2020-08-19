@@ -101,23 +101,7 @@ impl State {
         })
     }
 
-    pub fn execute_cycle(&mut self) -> Result<MachineState, String> {
-        let result = self.execute_instruction();
-        // Decrease delay timer
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
-        }
-        // TODO Implement beep!
-        // if self.sound_timer == 1 {
-        //    beep(440. * si::HZ);
-        // }
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
-        return result;
-    }
-
-    fn execute_instruction(&mut self) -> Result<MachineState, String> {
+    pub fn execute_instruction(&mut self) -> Result<MachineState, String> {
         //self.print_registers();
         let opcode: u16 = self.get_opcode()?;
         self.pc += 2;
@@ -500,6 +484,18 @@ impl State {
 
     pub fn set_keys_pressed(&mut self, keys: u16) {
         self.keypad = keys;
+    }
+
+    pub fn decrement_timers(&mut self) {
+        // Decrease delay timer
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        // Decrease sound  timer
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
     }
 
     fn get_opcode(&mut self) -> Result<u16, String> {

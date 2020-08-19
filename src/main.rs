@@ -4,6 +4,7 @@ extern crate linux_raw_input_rs;
 extern crate sdl2;
 extern crate clap;
 
+use std::time::Instant;
 use std::{thread, time};
 
 use clap::{Arg, App};
@@ -14,6 +15,8 @@ use chip8::{MachineState};
 mod renderers;
 use renderers::{Renderer, get_renders};
 use renderers::input::{KeyboardCommand};
+
+static TIMERS_DECREMENT_FRACTION: u128 = 1000 / 60;
 
 static ARG_GAME: &str = "arg_game";
 static ARG_RENDERER: &str = "arg_renderer";
@@ -70,14 +73,22 @@ fn run_loop(mut vm: chip8::State, mut renderer: Renderer) {
     renderer.input.initialize();
     renderer.graphics.initialize();
 
+    let mut time_counter = Instant::now();
+
     loop {
+        thread::sleep(time::Duration::from_millis(2));
         match renderer.input.get_keyboard_state() {
             KeyboardCommand::KeypadState(state) => { vm.set_keys_pressed(state) },
             KeyboardCommand::SingleKey(key) => { vm.wait_key_press(key) },
             KeyboardCommand::Quit => break,
         }
 
-        match vm.execute_cycle() {
+        if time_counter.elapsed().as_millis() > TIMERS_DECREMENT_FRACTION {
+            vm.decrement_timers();
+            time_counter = Instant::now();
+        }
+
+        match vm.execute_instruction() {
             Ok(MachineState::SuccessfulExecution) => continue,
             Ok(MachineState::WaitForKeyboard) => renderer.input.set_waiting_key(),
             Ok(MachineState::Draw(screen)) => renderer.graphics.draw(screen),
@@ -86,6 +97,5 @@ fn run_loop(mut vm: chip8::State, mut renderer: Renderer) {
                 break;
             }
         }
-        thread::sleep(time::Duration::from_millis(1000 / 30));
     }
 }

@@ -1,5 +1,5 @@
-pub mod termion_graphics;
 pub mod sdl_graphics;
+pub mod termion_graphics;
 
 pub trait Graphics {
     fn initialize(&mut self);

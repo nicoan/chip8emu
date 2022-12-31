@@ -1,20 +1,20 @@
-extern crate rand;
-extern crate termion;
-extern crate linux_raw_input_rs;
-extern crate sdl2;
 extern crate clap;
+extern crate linux_raw_input_rs;
+extern crate rand;
+extern crate sdl2;
+extern crate termion;
 
 use std::time::Instant;
 use std::{thread, time};
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 mod chip8;
-use chip8::{MachineState};
+use chip8::MachineState;
 
 mod renderers;
-use renderers::{Renderer, get_renders};
-use renderers::input::{KeyboardCommand};
+use renderers::input::KeyboardCommand;
+use renderers::{get_renders, Renderer};
 
 static TIMERS_DECREMENT_FRACTION: u128 = 1000 / 60;
 
@@ -42,14 +42,14 @@ fn main() {
         .author("Nicolás Antinori <nicolas.antinori.7@gmail.com>")
         .about(KEYMAPPING)
         .arg(Arg::with_name(ARG_GAME)
-            .short("g")
+            .short('g')
             .long("game")
             .value_name("FILE")
             .help("Path to the game")
             .required(true)
             .takes_value(true))
         .arg(Arg::with_name(ARG_RENDERER)
-            .short("r")
+            .short('r')
             .long("renderer")
             .value_name("terminal | sdl")
             .help("Render method to use. For terminal root privileges are needed (for reading keyboard input asynchronously)")
@@ -78,8 +78,8 @@ fn run_loop(mut vm: chip8::State, mut renderer: Renderer) {
     loop {
         thread::sleep(time::Duration::from_millis(2));
         match renderer.input.get_keyboard_state() {
-            KeyboardCommand::KeypadState(state) => { vm.set_keys_pressed(state) },
-            KeyboardCommand::SingleKey(key) => { vm.wait_key_press(key) },
+            KeyboardCommand::KeypadState(state) => vm.set_keys_pressed(state),
+            KeyboardCommand::SingleKey(key) => vm.wait_key_press(key),
             KeyboardCommand::Quit => break,
         }
 
@@ -91,7 +91,7 @@ fn run_loop(mut vm: chip8::State, mut renderer: Renderer) {
         match vm.execute_instruction() {
             Ok(MachineState::SuccessfulExecution) => continue,
             Ok(MachineState::WaitForKeyboard) => renderer.input.set_waiting_key(),
-            Ok(MachineState::Draw(screen)) => renderer.graphics.draw(screen),
+            Ok(MachineState::Draw(screen)) => renderer.graphics.draw(*screen),
             Err(error) => {
                 println!("{}", error);
                 break;

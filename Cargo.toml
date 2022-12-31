@@ -4,10 +4,10 @@ version = "0.1.0"
 authors = ["Nicolas Antinori <nicolas_antinori@hotmail.com>"]
 
 [dependencies]
-rand = "0.4.6"
-termion = "1.5.1"
+rand = "0.8"
+termion = "2.0"
 linux_raw_input_rs = "0.1.6"
-clap = "2.33.0"
+clap = "3"
 
 [dependencies.sdl2]
 version = "0.30"

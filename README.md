@@ -2,7 +2,7 @@
 
 ![Preview](https://raw.githubusercontent.com/nicoan/chip8emu/master/preview.gif)
 
-The objective of this project is to get some understanding in how emulators work and use it as an opportunity to learn and play a little with Rust lang. 
+The objective of this project is to get some understanding in how emulators work and use it as an opportunity to learn and play a little with Rust lang.
 
 ## Build
 
@@ -17,7 +17,7 @@ Release: `cargo build --release`
 ## Run
 
 ```
-cargo run -- [OPTIONS] --game <FILE> 
+cargo run -- [OPTIONS] --game <FILE>
 ```
 
 #### Options
@@ -49,5 +49,5 @@ To exit emulator, press 'o' key.
 
 ## Resources
 - [Cowgod's Chip-8 Technical Reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM)
-- [How to write an emulator (CHIP-8 interpreter](http://www.multigesture.net/articles/how-to-write-an-emulator-chip-8-interpreter/)
+- [How to write an emulator (CHIP-8 interpreter)](http://www.multigesture.net/articles/how-to-write-an-emulator-chip-8-interpreter/)
 - [Mastering Chip-8](http://mattmik.com/files/chip8/mastering/chip8.html)

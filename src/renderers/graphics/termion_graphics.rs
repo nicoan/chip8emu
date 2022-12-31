@@ -1,8 +1,8 @@
 extern crate termion;
 use renderers::graphics::Graphics;
-use termion::{cursor, clear};
+use std::io::{stdout, Stdout, Write};
 use termion::raw::IntoRawMode;
-use std::io::{Write, stdout, Stdout};
+use termion::{clear, cursor};
 
 pub struct TermionGraphics {
     output_stream: termion::raw::RawTerminal<Stdout>,
@@ -50,15 +50,27 @@ impl Graphics for TermionGraphics {
         for y in (0..16).map(|x| x * 2) {
             for x in 0..8 {
                 for i in 0..8 {
-                    let top_square: bool = (screen[y as usize][x as usize] << i) & 0x80 == 0x80;
-                    let bottom_square: bool = (screen[y + 1 as usize][x as usize] << i) & 0x80 == 0x80;
+                    let top_square: bool = (screen[y][x as usize] << i) & 0x80 == 0x80;
+                    let bottom_square: bool = (screen[y + 1_usize][x as usize] << i) & 0x80 == 0x80;
                     let x_coord = (x * 8) + i + PADDING;
                     let y_coord: u16 = (y / 2) as u16 + PADDING;
                     match (top_square, bottom_square) {
-                        (true, true) => write!(self.output_stream, "{}█", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (true, false) => write!(self.output_stream, "{}▀", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (false, true) => write!(self.output_stream, "{}▄", cursor::Goto(x_coord, y_coord)).unwrap(),
-                        (false, false) => write!(self.output_stream, "{} ", cursor::Goto(x_coord, y_coord)).unwrap()
+                        (true, true) => {
+                            write!(self.output_stream, "{}█", cursor::Goto(x_coord, y_coord))
+                                .unwrap()
+                        }
+                        (true, false) => {
+                            write!(self.output_stream, "{}▀", cursor::Goto(x_coord, y_coord))
+                                .unwrap()
+                        }
+                        (false, true) => {
+                            write!(self.output_stream, "{}▄", cursor::Goto(x_coord, y_coord))
+                                .unwrap()
+                        }
+                        (false, false) => {
+                            write!(self.output_stream, "{} ", cursor::Goto(x_coord, y_coord))
+                                .unwrap()
+                        }
                     }
                 }
             }
